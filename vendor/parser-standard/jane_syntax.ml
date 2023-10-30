@@ -5,13 +5,13 @@ open Jane_syntax_parsing
 (****************************************)
 (* Helpers used just within this module *)
 
-module type Extension_string = sig
+module type Extension = sig
   val feature : Feature.t
-  val extension_string : string
 end
 
-module Ast_of (AST : AST)
-              (Ext : Extension_string) : sig
+
+module Ast_of (AST : AST with type 'a with_attributes := 'a * attributes)
+              (Ext : Extension) : sig
   (* Wrap a bit of AST with a jane-syntax annotation *)
   val wrap_jane_syntax :
     string list ->   (* these strings describe the bit of new syntax *)
@@ -21,57 +21,6 @@ module Ast_of (AST : AST)
 end = struct
   let wrap_jane_syntax suffixes ?payload to_be_wrapped =
     AST.make_jane_syntax Ext.feature suffixes ?payload to_be_wrapped
-end
-
-module Of_ast (Ext : Extension_string) : sig
-  (* Find and remove a jane-syntax attribute marker, throwing an exception
-     if the attribute name does not have the right format or extension. *)
-  val unwrap_jane_syntax_attributes :
-    loc:Location.t ->
-    attributes ->
-    string list * payload * attributes
-end = struct
-  module Desugaring_error = struct
-    type error =
-      | Not_this_embedding of Embedded_name.t
-      | Non_embedding
-
-    let report_error ~loc = function
-      | Not_this_embedding name ->
-          Location.errorf ~loc
-            "Tried to desugar the embedded term %a@ \
-             as belonging to the %s extension"
-            Embedded_name.pp_quoted_name name Ext.extension_string
-      | Non_embedding ->
-          Location.errorf ~loc
-            "Tried to desugar a non-embedded expression@ \
-             as belonging to the %s extension"
-            Ext.extension_string
-
-    exception Error of Location.t * error
-
-    let () =
-      Location.register_error_of_exn
-        (function
-          | Error(loc, err) ->
-            Some (report_error ~loc err)
-          | _ -> None)
-
-    let raise ~loc err =
-      raise (Error(loc, err))
-  end
-
-  let unwrap_jane_syntax_attributes ~loc attrs =
-    match find_and_remove_jane_syntax_attribute attrs with
-    | Some (ext_name, _loc, payload, attrs) -> begin
-        match Jane_syntax_parsing.Embedded_name.components ext_name with
-        | extension_occur :: names
-             when String.equal extension_occur Ext.extension_string ->
-           names, payload, attrs
-        | _ ->
-           Desugaring_error.raise ~loc (Not_this_embedding ext_name)
-      end
-    | None -> Desugaring_error.raise ~loc Non_embedding
 end
 
 (******************************************************************************)
@@ -515,12 +464,9 @@ end
 module Layouts = struct
   module Ext = struct
     let feature : Feature.t = Language_extension Layouts
-    let extension_string = Feature.extension_component feature
   end
 
   include Ext
-
-  module Of_ast = Of_ast (Ext)
 
   type constant =
     | Float of string * char option
@@ -743,7 +689,7 @@ module Layouts = struct
   (*******************************************************)
   (* Encoding expressions *)
 
-  let expr_of ~loc ~attrs expr =
+  let expr_of ~loc expr =
     let module Ast_of = Ast_of (Expression) (Ext) in
     (* See Note [Wrapping with make_entire_jane_syntax] *)
     Expression.make_entire_jane_syntax ~loc feature begin fun () ->
@@ -751,11 +697,11 @@ module Layouts = struct
       | Lexp_constant c ->
         let constant = constant_of c in
         Ast_of.wrap_jane_syntax ["unboxed"] @@
-        Ast_helper.Exp.constant ~attrs constant
+        Ast_helper.Exp.constant constant
       | Lexp_newtype (name, layout, inner_expr) ->
         let payload = Encode.as_payload layout in
         Ast_of.wrap_jane_syntax ["newtype"] ~payload @@
-        Ast_helper.Exp.newtype ~attrs name inner_expr
+        Ast_helper.Exp.newtype name inner_expr
     end
 
   (*******************************************************)
@@ -763,35 +709,27 @@ module Layouts = struct
 
   let of_expr expr =
     let loc = expr.pexp_loc in
-    let names, payload, attributes =
-      Of_ast.unwrap_jane_syntax_attributes ~loc expr.pexp_attributes
+    let expr, subparts, payload =
+      Expression.match_payload_jane_syntax feature expr
     in
-    let lexpr = match names with
-      | [ "unboxed" ] ->
-        begin match expr.pexp_desc with
-        | Pexp_constant const -> Lexp_constant (of_constant ~loc const)
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_expr expr)
-        end
-      | [ "newtype" ] ->
+    match subparts, expr.pexp_desc, payload with
+    | [ "unboxed" ], Pexp_constant const, PStr [] ->
+        Lexp_constant (of_constant ~loc const)
+    | [ "newtype" ], Pexp_newtype (name, inner_expr), payload ->
         let layout = Decode.from_payload ~loc payload in
-        begin match expr.pexp_desc with
-        | Pexp_newtype (name, inner_expr) ->
-          Lexp_newtype (name, layout, inner_expr)
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_expr expr)
-        end
-      | _ -> Desugaring_error.raise ~loc (Unexpected_attribute names)
-    in
-    lexpr, attributes
+        Lexp_newtype (name, layout, inner_expr)
+    | _ ->
+	      Expression.raise_partial_payload_match feature expr subparts payload
 
   (*******************************************************)
   (* Encoding patterns *)
 
-  let pat_of ~loc ~attrs t =
+  let pat_of ~loc t =
     Pattern.make_entire_jane_syntax ~loc feature begin fun () ->
       match t with
       | Lpat_constant c ->
         let constant = constant_of c in
-        Ast_helper.Pat.constant ~attrs constant
+        Ast_helper.Pat.constant constant
     end
 
   (*******************************************************)
@@ -799,17 +737,16 @@ module Layouts = struct
 
   let of_pat pat =
     let loc = pat.ppat_loc in
-    let lpat = match pat.ppat_desc with
-      | Ppat_constant const -> Lpat_constant (of_constant ~loc const)
-      | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_pat pat)
-    in
-    lpat, pat.ppat_attributes
+    match pat.ppat_desc with
+    | Ppat_constant const -> Lpat_constant (of_constant ~loc const)
+    | _ -> Pattern.raise_partial_match feature pat []
 
   (*******************************************************)
   (* Encoding types *)
+
   module Type_of = Ast_of (Core_type) (Ext)
 
-  let type_of ~loc ~attrs typ =
+  let type_of ~loc typ =
     let exception No_wrap_necessary of Parsetree.core_type in
     try
       (* See Note [Wrapping with make_entire_jane_syntax] *)
@@ -819,13 +756,13 @@ module Layouts = struct
           let payload = Encode.as_payload layout in
           Type_of.wrap_jane_syntax ["var"] ~payload @@
           begin match name with
-          | None -> Ast_helper.Typ.any ~loc ~attrs ()
-          | Some name -> Ast_helper.Typ.var ~loc ~attrs name
+          | None -> Ast_helper.Typ.any ~loc ()
+          | Some name -> Ast_helper.Typ.var ~loc name
           end
         | Ltyp_poly { bound_vars; inner_type } ->
           let var_names, layouts = List.split bound_vars in
           (* Pass the loc because we don't want a ghost location here *)
-          let tpoly = Ast_helper.Typ.poly ~loc ~attrs var_names inner_type in
+          let tpoly = Ast_helper.Typ.poly ~loc var_names inner_type in
           if List.for_all Option.is_none layouts
           then raise (No_wrap_necessary tpoly)
           else
@@ -835,9 +772,7 @@ module Layouts = struct
         | Ltyp_alias { aliased_type; name; layout } ->
           let payload = Encode.as_payload layout in
           let has_name, inner_typ = match name with
-            | None -> "anon", { aliased_type with
-                                ptyp_attributes =
-                                  aliased_type.ptyp_attributes @ attrs }
+            | None -> "anon", aliased_type
             | Some name -> "named", Ast_helper.Typ.alias aliased_type name
           in
           Type_of.wrap_jane_syntax ["alias"; has_name] ~payload inner_typ
@@ -850,60 +785,45 @@ module Layouts = struct
 
   let of_type typ =
     let loc = typ.ptyp_loc in
-    let names, payload, attributes =
-      Of_ast.unwrap_jane_syntax_attributes ~loc typ.ptyp_attributes
+    let typ, subparts, payload =
+      Core_type.match_payload_jane_syntax feature typ
     in
-    let lty = match names with
-      | [ "var" ] ->
+    match subparts, typ.ptyp_desc, payload with
+    | [ "var" ], _, _ ->
         let layout = Decode.from_payload ~loc payload in
-        begin match typ.ptyp_desc with
-        | Ptyp_any ->
-          Ltyp_var { name = None; layout }
-        | Ptyp_var name ->
-          Ltyp_var { name = Some name; layout }
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_type typ)
-        end
-
-      | [ "poly" ] ->
-        begin match typ.ptyp_desc with
-        | Ptyp_poly (var_names, inner_type) ->
-          let bound_vars =
-            Decode.bound_vars_from_vars_and_payload ~loc var_names payload
-          in
-          Ltyp_poly { bound_vars; inner_type }
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_type typ)
-        end
-
-      | [ "alias"; "anon" ] ->
+        let name = match typ.ptyp_desc with
+          | Ptyp_any -> None
+          | Ptyp_var name -> Some name
+          | _ ->
+              Core_type.raise_partial_payload_match feature typ subparts payload
+        in
+        Ltyp_var { name; layout }
+    | [ "poly" ], Ptyp_poly (var_names, inner_type), PStr [] ->
+        let bound_vars =
+          Decode.bound_vars_from_vars_and_payload ~loc var_names payload
+        in
+        Ltyp_poly { bound_vars; inner_type }
+    | [ "alias"; "anon" ], _, _ ->
         let layout = Decode.from_payload ~loc payload in
-        Ltyp_alias { aliased_type = { typ with ptyp_attributes = attributes }
-                    ; name = None
-                    ; layout }
-
-      | [ "alias"; "named" ] ->
+        Ltyp_alias { aliased_type = typ
+                   ; name = None
+                   ; layout }
+    | [ "alias"; "named" ], Ptyp_alias (inner_type, name), _ ->
         let layout = Decode.from_payload ~loc payload in
-        begin match typ.ptyp_desc with
-        | Ptyp_alias (inner_typ, name) ->
-          Ltyp_alias { aliased_type = inner_typ
-                      ; name = Some name
-                      ; layout }
-
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_type typ)
-        end
-
-      | _ ->
-        Desugaring_error.raise ~loc (Unexpected_attribute names)
-    in
-    lty, attributes
+        Ltyp_alias { aliased_type = inner_type
+                   ; name = Some name
+                   ; layout }
+    | _ ->
+	      Core_type.raise_partial_payload_match feature typ subparts payload
 
   (*******************************************************)
   (* Encoding extension constructor *)
 
   module Ext_ctor_of = Ast_of (Extension_constructor) (Ext)
 
-  let extension_constructor_of ~loc ~name ~attrs ?info ?docs ext =
+  let extension_constructor_of ~loc ~name ?info ?docs ext =
     (* using optional parameters to hook into existing defaulting
-        in [Ast_helper.Te.decl], which seems unwise to duplicate *)
+       in [Ast_helper.Te.decl], which seems unwise to duplicate *)
     let exception No_wrap_necessary of Parsetree.extension_constructor in
     try
       (* See Note [Wrapping with make_entire_jane_syntax] *)
@@ -914,8 +834,8 @@ module Layouts = struct
               let vars, layouts = List.split bound_vars in
               let ext_ctor =
                 (* Pass ~loc here, because the constructor declaration is
-                    not a ghost *)
-                Ast_helper.Te.decl ~loc ~attrs ~vars ~args ?info ?docs ?res name
+                   not a ghost *)
+                Ast_helper.Te.decl ~loc ~vars ~args ?info ?docs ?res name
               in
               if List.for_all Option.is_none layouts
               then raise (No_wrap_necessary ext_ctor)
@@ -931,24 +851,18 @@ module Layouts = struct
 
   let of_extension_constructor ext =
     let loc = ext.pext_loc in
-    let names, payload, attributes =
-      Of_ast.unwrap_jane_syntax_attributes ~loc ext.pext_attributes
+    let ext, subparts, payload =
+      Extension_constructor.match_payload_jane_syntax feature ext
     in
-    let lext = match names with
-      | [ "ext" ] ->
-        begin match ext.pext_kind with
-        | Pext_decl (var_names, args, res) ->
-          let bound_vars =
-            Decode.bound_vars_from_vars_and_payload ~loc var_names payload
-          in
-          Lext_decl (bound_vars, args, res)
-        | _ -> Desugaring_error.raise ~loc (Unexpected_wrapped_ext ext)
-        end
-
-      | _ ->
-        Desugaring_error.raise ~loc (Unexpected_attribute names)
-    in
-    lext, attributes
+    match subparts, ext.pext_kind with
+    | [ "ext" ], Pext_decl (var_names, args, res) ->
+        let bound_vars =
+          Decode.bound_vars_from_vars_and_payload ~loc var_names payload
+        in
+        Lext_decl (bound_vars, args, res)
+    | _ ->
+        Extension_constructor.raise_partial_payload_match
+          feature ext subparts payload
 
   (*********************************************************)
   (* Constructing a [constructor_declaration] with layouts *)
@@ -959,36 +873,47 @@ module Layouts = struct
         ~res name =
     let vars, layouts = List.split vars_layouts in
     let ctor_decl =
-      Ast_helper.Type.constructor ~loc ~attrs ~info ~vars ~args ?res name
+      Ast_helper.Type.constructor ~loc ~info ~vars ~args ?res name
     in
-    if List.for_all Option.is_none layouts
-    then ctor_decl
-    else
-      let payload = Encode.option_list_as_payload layouts in
-      Constructor_declaration.make_entire_jane_syntax ~loc feature
-        begin fun () ->
-          Ctor_decl_of.wrap_jane_syntax ["vars"] ~payload ctor_decl
-        end
+    let ctor_decl =
+      if List.for_all Option.is_none layouts
+      then ctor_decl
+      else
+        let payload = Encode.option_list_as_payload layouts in
+        Constructor_declaration.make_entire_jane_syntax ~loc feature
+          begin fun () ->
+            Ctor_decl_of.wrap_jane_syntax ["vars"] ~payload ctor_decl
+          end
+    in
+    (* Performance hack: save an allocation if [attrs] is empty. *)
+    match attrs with
+    | [] -> ctor_decl
+    | _ :: _ as attrs ->
+        (* See Note [Outer attributes at end] *)
+        { ctor_decl with pcd_attributes = ctor_decl.pcd_attributes @ attrs }
 
   let of_constructor_declaration_internal (feat : Feature.t) ctor_decl =
     match feat with
     | Language_extension Layouts ->
       let loc = ctor_decl.pcd_loc in
-      let names, payload, attributes =
-        Of_ast.unwrap_jane_syntax_attributes ~loc ctor_decl.pcd_attributes
+      let ctor_decl, subparts, payload =
+        Constructor_declaration.match_payload_jane_syntax feature ctor_decl
       in
-      let vars_layouts = match names with
-        | [ "vars" ] ->
-          Decode.bound_vars_from_vars_and_payload
-            ~loc ctor_decl.pcd_vars payload
-        | _ -> Desugaring_error.raise ~loc (Unexpected_attribute names)
-      in
-      Some (vars_layouts, attributes)
-    | _ -> None
+      begin match subparts with
+      | [ "vars" ] ->
+        Some
+          (Decode.bound_vars_from_vars_and_payload
+             ~loc ctor_decl.pcd_vars payload)
+      | _ ->
+        Constructor_declaration.raise_partial_payload_match
+          feature ctor_decl subparts payload
+      end
+    | _ ->
+      None
 
   let of_constructor_declaration =
     Constructor_declaration.make_of_ast
-        ~of_ast_internal:of_constructor_declaration_internal
+       ~of_ast_internal:of_constructor_declaration_internal
 end
 
 (******************************************************************************)
