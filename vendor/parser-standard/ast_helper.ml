@@ -108,6 +108,10 @@ module Typ = struct
         | Ptyp_variant(row_field_list, flag, lbl_lst_option) ->
             Ptyp_variant(List.map loop_row_field row_field_list,
                          flag, lbl_lst_option)
+        (* A Ptyp_alias might be a layout annotation (that is, it might have
+           attributes which mean it should be interpreted as a
+           [Jane_syntax.Layouts.Ltyp_alias]), but the code here still has the
+           correct behavior. *)
         | Ptyp_poly(string_lst, core_type) ->
           List.iter (fun v ->
             check_variable var_names t.ptyp_loc v.txt) string_lst;
@@ -513,11 +517,13 @@ module Type = struct
   let mk ?(loc = !default_loc) ?(attrs = [])
         ?(docs = empty_docs) ?(text = [])
       ?(params = [])
+      ?layout
       ?(cstrs = [])
       ?(kind = Ptype_abstract)
       ?(priv = Public)
       ?manifest
       name =
+    let layout_attrs = Option.to_list layout in
     {
      ptype_name = name;
      ptype_params = params;
@@ -526,7 +532,7 @@ module Type = struct
      ptype_private = priv;
      ptype_manifest = manifest;
      ptype_attributes =
-       add_text_attrs text (add_docs_attrs docs attrs);
+      layout_attrs @ add_text_attrs text (add_docs_attrs docs attrs);
      ptype_loc = loc;
     }
 
