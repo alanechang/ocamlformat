@@ -183,6 +183,7 @@ module type AST = sig
   val make_jane_syntax
     :  Feature.t
     -> string list
+    -> ?payload:Parsetree.payload
     -> ast
     -> ast
 
