@@ -565,7 +565,7 @@ module type AST_internal = sig
 
   val embedding_syntax : Embedding_syntax.t
 
-  val make_jane_syntax : Embedded_name.t -> ast -> ast
+  val make_jane_syntax : Embedded_name.t -> ?payload:payload -> ast -> ast
 
   (** Given an AST node, check if it's a representation of a term from one of
       our novel syntactic features; if it is, split it back up into its name and
@@ -665,6 +665,15 @@ module Desugaring_error = struct
         | _ -> None)
 end
 
+let make_jane_syntax_attribute name payload =
+  { attr_name =
+      { txt = Embedded_name.to_string name
+      ; loc = !Ast_helper.default_loc
+      }
+  ; attr_loc = !Ast_helper.default_loc
+  ; attr_payload = payload
+  }
+
 (** For a syntactic category, produce translations into and out of
     our novel syntax, using parsetree attributes as the encoding.
 *)
@@ -683,33 +692,9 @@ module Make_with_attribute
 
     let embedding_syntax = Embedding_syntax.Attribute
 
-    let make_attr loc name =
-      let loc = Location.ghostify loc in
-      { attr_name = { txt = Embedded_name.to_string name; loc }
-      ; attr_loc = loc
-      ; attr_payload = PStr []
-      }
-
-    let make_jane_syntax name ast =
-      let attr = make_attr !Ast_helper.default_loc name in
-      let attrs =
-        match Embedded_name.components name with
-        | [feature_component] ->
-            (* Outermost; save the location *)
-            let save_loc = location ast in
-            [ make_attr
-                save_loc
-                { name
-                  with components =
-                         [ feature_component
-                         ; "_location"
-                         ; if save_loc.loc_ghost then "_ghost" else "_nonghost"]
-                }
-            ; attr ]
-        | _ :: _ :: _ ->
-            [attr]
-      in
-      add_attributes attrs ast
+    let make_jane_syntax name ?(payload = PStr []) ast =
+      let attr = make_jane_syntax_attribute name payload in
+      add_attributes [attr] ast
 
     let restore_location_from_attr (name : Embedded_name.t) ast =
       match name with
@@ -794,14 +779,14 @@ struct
 
   let embedding_syntax = Embedding_syntax.Extension_node
 
-  let make_jane_syntax name ast =
+  let make_jane_syntax name ?(payload = PStr []) ast =
     make_extension_use
       ast
       ~extension_node:
         (make_extension_node
            ({ txt = Embedded_name.to_string name
             ; loc = !Ast_helper.default_loc },
-            PStr []))
+            payload))
 
   let match_jane_syntax ast =
     match match_extension_use ast with
@@ -971,7 +956,9 @@ module type AST = sig
   type 'a with_attributes
   type ast
 
-  val make_jane_syntax : Feature.t -> string list -> ast -> ast
+  val make_jane_syntax : Feature.t -> string list -> ?payload:payload -> ast -> ast
+  val match_payload_jane_syntax :
+    Feature.t -> ast -> ast * string list * payload
   val make_entire_jane_syntax :
     loc:Location.t -> Feature.t -> (unit -> ast) -> ast
   val match_jane_syntax_piece :
@@ -1021,9 +1008,10 @@ module Make_ast
 struct
   include AST
 
-  let make_jane_syntax feature trailing_components ast =
+  let make_jane_syntax feature trailing_components ?payload ast =
     AST.make_jane_syntax
       (Embedded_name.of_feature feature trailing_components)
+      ?payload
       ast
 
   let make_entire_jane_syntax ~loc feature ast =
