@@ -552,20 +552,24 @@ let fmt_type_var (name_opt, layout_opt) =
   $ str name
   $ Option.value_map layout_opt
       ~default:(str "")
-      ~f:(fun layout -> str (fmt_layout layout.txt))
+      ~f:(fun layout -> str (" : " ^ (fmt_layout layout.txt)))
 
-let fmt_type_var_loc c s =
+(* let fmt_type_var_loc c s =
   Cmts.fmt c s.loc @@
-  let (name_opt, layout_opt) = s.txt in
-  let name = Option.value ~default:"_" name_opt in
-  str "'"
-  (* [' a'] is a valid type variable, the space is required to not lex as a
-      char. https://github.com/ocaml/ocaml/pull/2034 *)
-  $ fmt_if (String.length name > 1 && Char.equal name.[1] '\'') " "
-  $ str name
-  $ Option.value_map layout_opt
-      ~default:(str "")
-      ~f:(fun layout -> str (fmt_layout layout.txt))
+  fmt_type_var s.txt *)
+
+
+
+let fmt_type_var_no_tick_loc c s =
+  let fmt_type_var_no_tick (name_opt, layout_opt) =
+    let name = Option.value ~default:"_" name_opt in
+    str name
+    $ Option.value_map layout_opt
+        ~default:(str "")
+        ~f:(fun layout -> str (" : " ^ (fmt_layout layout.txt)))
+  in
+  Cmts.fmt c s.loc @@
+  fmt_type_var_no_tick s.txt
 
 let split_global_flags_from_attrs conf atrs =
   match
@@ -1425,7 +1429,7 @@ and fmt_fun_args c args =
     | Newtypes names ->
         cbox 0
           (Params.parens c.conf
-             (str "type " $ list names "@ " (fmt_type_var_loc c)) )
+             (str "type " $ list names "@ " (fmt_type_var_no_tick_loc c)) )
   in
   list args "@;" fmt_fun_arg
 
@@ -3153,7 +3157,7 @@ and fmt_class_field_kind c ctx = function
           in
           Cmts.relocate c.cmts ~src:pexp_loc ~before ~after:e.pexp_loc ;
           ( fmt "@ : type "
-            $ list args "@ " (fmt_type_var_loc c)
+            $ list args "@ " (fmt_type_var_no_tick_loc c)
             $ fmt_core_type ~pro:"." ~pro_space:false c (sub_typ ~ctx t)
           , noop
           , fmt "@;<1 2>="
@@ -3423,9 +3427,9 @@ and fmt_tydcl_params c ctx params =
     | [] -> (true, false)
     | [(p, _)] -> (
         ( false
-        , match p.ptyp_attributes with
-          | [] | _ :: _ :: _ -> false
-          | [attr] -> is_layout attr ) )
+        , match p.ptyp_desc with
+          | Ptyp_var (_, l) -> Option.is_some l
+          | _ -> false) )
     | _ :: _ :: _ -> (false, true)
   in
   fmt_if_k (not empty)
@@ -4585,7 +4589,7 @@ and fmt_value_binding c ~rec_flag ?ext ?in_ ?epi ctx
           fmt_sep ":"
           $ hvbox 0
               ( str "type "
-              $ list pvars " " (fmt_type_var_loc c)
+              $ list pvars " " (fmt_type_var_no_tick_loc c)
               $ fmt ".@ " $ fmt_core_type c xtyp )
         in
         ([], fmt_cstr)
