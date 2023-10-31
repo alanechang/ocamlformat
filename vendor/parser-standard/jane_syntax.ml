@@ -62,19 +62,181 @@ end
    future syntax features to remember to do this wrapping.
 *)
 
-module Builtin = struct
-  let make_curry_attr, extract_curry_attr, has_curry_attr =
-    Embedded_name.marker_attribute_handler ["curry"]
+module type Payload_protocol = sig
+  type t
 
-  let is_curried typ = has_curry_attr typ.ptyp_attributes
+  module Encode : sig
+    val as_payload : t loc -> payload
+    val list_as_payload : t loc list -> payload
+    val option_list_as_payload : t loc option list -> payload
+  end
+
+  module Decode : sig
+    val from_payload : loc:Location.t -> payload -> t loc
+    val list_from_payload : loc:Location.t -> payload -> t loc list
+    val option_list_from_payload :
+      loc:Location.t -> payload -> t loc option list
+  end
+end
+
+module type Stringable = sig
+  type t
+  val of_string : string -> t option
+  val to_string : t -> string
+
+  (** For error messages: a name that can be used to identify the
+      [t] being converted to and from string, and its indefinite
+      article (either "a" or "an").
+  *)
+  val indefinite_article_and_name : string * string
+end
+
+module Make_payload_protocol_of_stringable (Stringable : Stringable)
+  : Payload_protocol with type t := Stringable.t = struct
+  module Encode = struct
+    let as_expr t_loc =
+      let string = Stringable.to_string t_loc.txt in
+      Ast_helper.Exp.ident
+        (Location.mkloc (Longident.Lident string) t_loc.loc)
+
+    let structure_item_of_expr expr =
+      { pstr_desc = Pstr_eval (expr, []); pstr_loc = Location.none }
+
+    let structure_item_of_none =
+      { pstr_desc = Pstr_attribute { attr_name = Location.mknoloc "none"
+                                   ; attr_payload = PStr []
+                                   ; attr_loc = Location.none }
+      ; pstr_loc = Location.none }
+
+    let as_payload t_loc =
+      let expr = as_expr t_loc in
+      PStr [ structure_item_of_expr expr ]
+
+    let list_as_payload t_locs =
+      let items =
+        List.map (fun t_loc -> structure_item_of_expr (as_expr t_loc)) t_locs
+      in
+      PStr items
+
+    let option_list_as_payload t_locs =
+      let items =
+        List.map (function
+            | None -> structure_item_of_none
+            | Some t_loc -> structure_item_of_expr (as_expr t_loc))
+          t_locs
+      in
+      PStr items
+  end
+
+  module Desugaring_error = struct
+    type error =
+      | Unknown_payload of payload
+
+    let report_error ~loc = function
+      | Unknown_payload payload ->
+        let indefinite_article, name = Stringable.indefinite_article_and_name in
+        Location.errorf ~loc
+          "Attribute payload does not name %s %s:@;%a"
+          indefinite_article name
+          (Printast.payload 0) payload
+
+    exception Error of Location.t * error
+
+    let () =
+      Location.register_error_of_exn
+        (function
+          | Error(loc, err) ->
+              Some (report_error ~loc err)
+          | _ -> None)
+
+    let raise ~loc err =
+      raise (Error(loc, err))
+  end
+
+  module Decode = struct
+    (* Avoid exporting a definition that raises [Unexpected]. *)
+    open struct
+      exception Unexpected
+
+      let from_expr = function
+        | { pexp_desc = Pexp_ident payload_lid; _ } ->
+            let t =
+              match Stringable.of_string (Longident.last payload_lid.txt) with
+              | None -> raise Unexpected
+              | Some t -> t
+            in
+            Location.mkloc t payload_lid.loc
+        | _ -> raise Unexpected
+
+      let expr_of_structure_item = function
+        | { pstr_desc = Pstr_eval (expr, _) } -> expr
+        | _ -> raise Unexpected
+
+      let is_none_structure_item = function
+        | { pstr_desc = Pstr_attribute { attr_name = { txt = "none" } } } ->
+            true
+        | _ -> false
+
+      let from_payload payload =
+        match payload with
+        | PStr [ item ] -> from_expr (expr_of_structure_item item)
+        | _ -> raise Unexpected
+
+      let list_from_payload payload =
+        match payload with
+        | PStr items ->
+            List.map (fun item -> from_expr (expr_of_structure_item item)) items
+        | _ -> raise Unexpected
+
+      let option_list_from_payload payload =
+        match payload with
+        | PStr items ->
+            List.map (fun item ->
+                if is_none_structure_item item
+                then None
+                else Some (from_expr (expr_of_structure_item item)))
+              items
+        | _ -> raise Unexpected
+    end
+
+    let from_payload ~loc payload : _ loc =
+      try from_payload payload
+      with Unexpected -> Desugaring_error.raise ~loc (Unknown_payload payload)
+
+    let list_from_payload ~loc payload : _ list =
+      try list_from_payload payload
+      with Unexpected -> Desugaring_error.raise ~loc (Unknown_payload payload)
+
+    let option_list_from_payload ~loc payload : _ list =
+      try option_list_from_payload payload
+      with Unexpected -> Desugaring_error.raise ~loc (Unknown_payload payload)
+  end
+end
+
+module Builtin = struct
+  let is_curry_attr = function
+    | { attr_name = { txt = name; loc = _ }
+      ; attr_payload = PStr []
+      ; attr_loc = _ } ->
+      String.equal Jane_syntax_parsing.Marker_attributes.curry name
+    | _ -> false
+
+  let is_curried typ = List.exists is_curry_attr typ.ptyp_attributes
 
   let mark_curried ~loc typ = match typ.ptyp_desc with
-    | Ptyp_arrow _ when not (is_curried typ) ->
-        Core_type.add_attributes [make_curry_attr ~loc] typ
-    | _ -> typ
+  | Ptyp_arrow _ when not (is_curried typ) ->
+    let loc = Location.ghostify loc in
+    let curry_attr =
+      Ast_helper.Attr.mk
+        ~loc
+        (Location.mkloc Jane_syntax_parsing.Marker_attributes.curry loc)
+        (PStr [])
+    in
+    Core_type.add_attributes [curry_attr] typ
+  | _ -> typ
 
-  let non_syntax_attributes attrs =
-    Option.value ~default:attrs (extract_curry_attr attrs)
+let non_syntax_attributes attrs =
+  List.filter (fun attr -> not (is_curry_attr attr)) attrs
 end
 
 (** Locality modes *)
@@ -460,6 +622,91 @@ module Strengthen = struct
     | _ -> failwith "Malformed strengthened module type"
 end
 
+(** Layout annotations' encoding as attribute payload, used in both n-ary
+    functions and layouts. *)
+module Layout_annotation : sig
+  include Payload_protocol with type t := const_layout
+
+  module Decode : sig
+    include module type of Decode
+
+    val bound_vars_from_vars_and_payload :
+      loc:Location.t -> string Location.loc list -> payload ->
+      (string Location.loc * layout_annotation option) list
+  end
+end = struct
+  module Protocol = Make_payload_protocol_of_stringable (struct
+      type t = const_layout
+
+      let indefinite_article_and_name = "a", "layout"
+
+      let to_string = function
+        | Any -> "any"
+        | Value -> "value"
+        | Void -> "void"
+        | Immediate64 -> "immediate64"
+        | Immediate -> "immediate"
+        | Float64 -> "float64"
+
+      (* CR layouts v1.5: revise when moving layout recognition away from parser*)
+      let of_string = function
+        | "any" -> Some Any
+        | "value" -> Some Value
+        | "void" -> Some Void
+        | "immediate" -> Some Immediate
+        | "immediate64" -> Some Immediate64
+        | "float64" -> Some Float64
+        | _ -> None
+    end)
+  (*******************************************************)
+  (* Conversions with a payload *)
+
+  module Encode = Protocol.Encode
+
+  module Decode = struct
+    include Protocol.Decode
+
+    module Desugaring_error = struct
+      type error =
+        | Wrong_number_of_layouts of int * layout_annotation option list
+
+      let report_error ~loc = function
+        | Wrong_number_of_layouts (n, layouts) ->
+            Location.errorf ~loc
+              "Wrong number of layouts in an layout attribute;@;\
+              expecting %i but got this list:@;%a"
+              n
+              (Format.pp_print_list
+                (Format.pp_print_option
+                    ~none:(fun ppf () -> Format.fprintf ppf "None")
+                    (Printast.layout_annotation 0)))
+              layouts
+
+      exception Error of Location.t * error
+
+      let () =
+        Location.register_error_of_exn
+          (function
+            | Error(loc, err) ->
+                Some (report_error ~loc err)
+            | _ -> None)
+
+      let raise ~loc err =
+        raise (Error(loc, err))
+    end
+
+    let bound_vars_from_vars_and_payload ~loc var_names payload =
+      let layouts = option_list_from_payload ~loc payload in
+      try
+        List.combine var_names layouts
+      with
+      (* seems silly to check the length in advance when [combine] does *)
+        Invalid_argument _ ->
+        Desugaring_error.raise ~loc
+          (Wrong_number_of_layouts(List.length var_names, layouts))
+  end
+end
+
 (** Layouts *)
 module Layouts = struct
   module Ext = struct
@@ -483,7 +730,7 @@ module Layouts = struct
     | Ltyp_var of { name : string option
                   ; layout : Asttypes.layout_annotation }
     | Ltyp_poly of { bound_vars : (string loc * layout_annotation option) list
-                    ; inner_type : core_type }
+                   ; inner_type : core_type }
     | Ltyp_alias of { aliased_type : core_type
                     ; name : string option
                     ; layout : Asttypes.layout_annotation }
@@ -491,53 +738,18 @@ module Layouts = struct
   type nonrec extension_constructor =
     | Lext_decl of (string Location.loc *
                     Asttypes.layout_annotation option) list *
-                    constructor_arguments *
-                    Parsetree.core_type option
+                   constructor_arguments *
+                   Parsetree.core_type option
 
   (*******************************************************)
   (* Errors *)
 
   module Desugaring_error = struct
     type error =
-      | Not_a_layout of Parsetree.payload
-      | Unexpected_wrapped_type of Parsetree.core_type
-      | Unexpected_wrapped_ext of Parsetree.extension_constructor
-      | Unexpected_attribute of string list
-      | Wrong_number_of_layouts of int * layout_annotation option list
       | No_integer_suffix
       | Unexpected_constant of Parsetree.constant
-      | Unexpected_wrapped_expr of Parsetree.expression
-      | Unexpected_wrapped_pat of Parsetree.pattern
 
     let report_error ~loc = function
-      | Not_a_layout payload ->
-        Location.errorf ~loc
-          "Layout attribute does not name a layout:@;%a"
-          (Printast.payload 0) payload
-      | Unexpected_wrapped_type typ ->
-        Location.errorf ~loc
-          "Layout attribute on wrong core type:@;%a"
-          (Printast.core_type 0) typ
-      | Unexpected_wrapped_ext ext ->
-        Location.errorf ~loc
-          "Layout attribute on wrong extension constructor:@;%a"
-          (Printast.extension_constructor 0) ext
-      | Unexpected_attribute names ->
-        Location.errorf ~loc
-          "Layout extension does not understand these attribute names:@;[%a]"
-          (Format.pp_print_list
-              ~pp_sep:(fun ppf () -> Format.fprintf ppf ";@ ")
-              Format.pp_print_text) names
-      | Wrong_number_of_layouts (n, layouts) ->
-        Location.errorf ~loc
-          "Wrong number of layouts in an layout attribute;@;\
-            expecting %i but got this list:@;%a"
-          n
-          (Format.pp_print_list
-              (Format.pp_print_option
-                ~none:(fun ppf () -> Format.fprintf ppf "None")
-                (Printast.layout_annotation 0)))
-          layouts
       | No_integer_suffix ->
         Location.errorf ~loc
           "All unboxed integers require a suffix to determine their size."
@@ -545,14 +757,6 @@ module Layouts = struct
         Location.errorf ~loc
           "Unexpected unboxed constant:@ %a"
           (Printast.constant) c
-      | Unexpected_wrapped_expr expr ->
-        Location.errorf ~loc
-          "Layout attribute on wrong expression:@;%a"
-          (Printast.expression 0) expr
-      | Unexpected_wrapped_pat pat ->
-        Location.errorf ~loc
-          "Layout attribute on wrong pattern:@;%a"
-          (Printast.pattern 0) pat
 
     exception Error of Location.t * error
 
@@ -565,111 +769,8 @@ module Layouts = struct
     let raise ~loc err = raise (Error(loc, err))
   end
 
-  (*******************************************************)
-  (* Conversions with a payload *)
-
-  module Encode : sig
-    val as_payload : layout_annotation -> payload
-    val option_list_as_payload : layout_annotation option list -> payload
-  end = struct
-    let as_expr layout =
-      (* CR layouts v1.5: revise when moving layout recognition away from parser*)
-      let layout_string = match layout.txt with
-        | Any -> "any"
-        | Value -> "value"
-        | Void -> "void"
-        | Immediate64 -> "immediate64"
-        | Immediate -> "immediate"
-        | Float64 -> "float64"
-      in
-      Ast_helper.Exp.ident
-        (Location.mkloc (Longident.Lident layout_string) layout.loc)
-
-    let structure_item_of_expr expr =
-      { pstr_desc = Pstr_eval (expr, []); pstr_loc = Location.none }
-
-    let structure_item_of_none =
-      { pstr_desc = Pstr_attribute { attr_name = Location.mknoloc "none"
-                                    ; attr_payload = PStr []
-                                    ; attr_loc = Location.none }
-      ; pstr_loc = Location.none }
-
-    let as_payload layout =
-      let expr = as_expr layout in
-      PStr [ structure_item_of_expr expr ]
-
-    let option_list_as_payload layouts =
-      let items =
-        List.map (function
-          | None -> structure_item_of_none
-          | Some layout -> structure_item_of_expr (as_expr layout))
-          layouts
-      in
-      PStr items
-  end
-
-  module Decode : sig
-    val from_payload : loc:Location.t -> payload -> layout_annotation
-    val bound_vars_from_vars_and_payload :
-      loc:Location.t -> string Location.loc list -> payload ->
-      (string Location.loc * layout_annotation option) list
-  end = struct
-    exception Unexpected
-
-    let from_expr = function
-      | { pexp_desc = Pexp_ident layout_lid; _ } ->
-        (* CR layouts v1.5: revise when moving layout recognition away from parser*)
-        let layout = match Longident.last layout_lid.txt with
-          | "any" -> Any
-          | "value" -> Value
-          | "void" -> Void
-          | "immediate" -> Immediate
-          | "immediate64" -> Immediate64
-          | "float64" -> Float64
-          | _ -> raise Unexpected
-        in
-        Location.mkloc layout layout_lid.loc
-      | _ -> raise Unexpected
-
-    let expr_of_structure_item = function
-      | { pstr_desc = Pstr_eval (expr, _) } -> expr
-      | _ -> raise Unexpected
-
-    let is_none_structure_item = function
-      | { pstr_desc = Pstr_attribute { attr_name = { txt = "none" } } } -> true
-      | _ -> false
-
-    let from_payload ~loc payload =
-      try
-        match payload with
-        | PStr [ item ] -> from_expr (expr_of_structure_item item)
-        | _ -> raise Unexpected
-      with
-        Unexpected -> Desugaring_error.raise ~loc (Not_a_layout payload)
-
-    let option_list_from_payload ~loc payload =
-      try
-        match payload with
-        | PStr items ->
-          List.map (fun item ->
-            if is_none_structure_item item
-            then None
-            else Some (from_expr (expr_of_structure_item item)))
-            items
-        | _ -> raise Unexpected
-      with
-        Unexpected -> Desugaring_error.raise ~loc (Not_a_layout payload)
-
-    let bound_vars_from_vars_and_payload ~loc var_names payload =
-      let layouts = option_list_from_payload ~loc payload in
-      try
-        List.combine var_names layouts
-      with
-      (* seems silly to check the length in advance when [combine] does *)
-        Invalid_argument _ ->
-        Desugaring_error.raise ~loc
-          (Wrong_number_of_layouts(List.length var_names, layouts))
-  end
+  module Encode = Layout_annotation.Encode
+  module Decode = Layout_annotation.Decode
 
   (*******************************************************)
   (* Constants *)
@@ -684,7 +785,6 @@ module Layouts = struct
     | Pconst_integer (_, None) ->
       Desugaring_error.raise ~loc No_integer_suffix
     | const -> Desugaring_error.raise ~loc (Unexpected_constant const)
-
 
   (*******************************************************)
   (* Encoding expressions *)
@@ -934,15 +1034,15 @@ module Core_type = struct
 
   let of_ast_internal (feat : Feature.t) typ = match feat with
     | Language_extension Local -> Some (Jtyp_local (Local.of_type typ))
-    | Language_extension Layouts ->
-      let typ, attrs = Layouts.of_type typ in
-+     Some (Jtyp_layout typ, attrs)
+    | Language_extension Layouts -> Some (Jtyp_layout (Layouts.of_type typ))
     | _ -> None
 
   let of_ast = Core_type.make_of_ast ~of_ast_internal
 
-  let ast_of ~loc (jtyp, attrs) = match jtyp with
+  let ast_of ~loc (jtyp, attrs) =
+    match jtyp with
     | Jtyp_local x -> Local.type_of ~loc ~attrs x
+    | Jtyp_layout x -> Core_type.add_attributes attrs @@ Layouts.type_of ~loc x
 end
 
 module Constructor_argument = struct
@@ -973,9 +1073,8 @@ module Expression = struct
       Some (Jexp_comprehension (Comprehensions.of_expr expr))
     | Language_extension Immutable_arrays ->
       Some (Jexp_immutable_array (Immutable_arrays.of_expr expr))
-    | Language_extension Layouts ->
-      let expr, attrs = Layouts.of_expr expr in
-      Some (Jexp_layout expr, attrs)    | _ -> None
+    | Language_extension Layouts -> Some (Jexp_layout (Layouts.of_expr expr))
+    | _ -> None
 
   let of_ast = Expression.make_of_ast ~of_ast_internal
 
@@ -983,7 +1082,7 @@ module Expression = struct
     | Jexp_local            x -> Local.expr_of             ~loc ~attrs x
     | Jexp_comprehension    x -> Comprehensions.expr_of    ~loc ~attrs x
     | Jexp_immutable_array  x -> Immutable_arrays.expr_of  ~loc ~attrs x
-    | Jexp_layout x -> Layouts.expr_of ~loc ~attrs x
+    | Jexp_layout x -> Expression.add_attributes attrs @@ Layouts.expr_of ~loc x
 end
 
 module Pattern = struct
@@ -998,8 +1097,7 @@ module Pattern = struct
     | Language_extension Immutable_arrays ->
       Some (Jpat_immutable_array (Immutable_arrays.of_pat pat))
     | Language_extension Layouts ->
-      let pat, attrs = Layouts.of_pat pat in
-      Some (Jpat_layout pat, attrs)
+      Some (Jpat_layout (Layouts.of_pat pat))
     | _ -> None
 
   let of_ast = Pattern.make_of_ast ~of_ast_internal
@@ -1007,7 +1105,7 @@ module Pattern = struct
   let ast_of ~loc (jpat, attrs) = match jpat with
     | Jpat_local x -> Local.pat_of ~loc ~attrs x
     | Jpat_immutable_array x -> Immutable_arrays.pat_of ~loc ~attrs x
-    | Jpat_layout x -> Layouts.pat_of ~loc ~attrs x
+    | Jpat_layout x -> Pattern.add_attributes attrs @@ Layouts.pat_of ~loc x
 end
 
 module Module_type = struct
@@ -1063,16 +1161,18 @@ module Extension_constructor = struct
 
   let of_ast_internal (feat : Feature.t) ext = match feat with
     | Language_extension Layouts ->
-      let ext, attrs = Layouts.of_extension_constructor ext in
-      Some (Jext_layout ext, attrs)
+      Some (Jext_layout (Layouts.of_extension_constructor ext))
     | _ -> None
 
   let of_ast = Extension_constructor.make_of_ast ~of_ast_internal
 
-  let ast_of ~loc:_ (jext, _attrs) = match jext with
-    | (_ : t) -> .
+  let ast_of ~loc:_ = assert false
 
-  let extension_constructor_of ~loc ~name ~attrs ?info ?docs = function
-    | Jext_layout lext ->
-      Layouts.extension_constructor_of ~loc ~name ~attrs ?info ?docs lext
+  let extension_constructor_of ~loc ~name ~attrs ?info ?docs t =
+    let ext_ctor =
+      match t with
+      | Jext_layout lext ->
+          Layouts.extension_constructor_of ~loc ~name ?info ?docs lext
+    in
+    Extension_constructor.add_attributes attrs ext_ctor
 end
