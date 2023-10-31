@@ -550,26 +550,19 @@ let fmt_type_var (name_opt, layout_opt) =
      char. https://github.com/ocaml/ocaml/pull/2034 *)
   $ fmt_if (String.length name > 1 && Char.equal name.[1] '\'') " "
   $ str name
-  $ Option.value_map layout_opt
-      ~default:(str "")
-      ~f:(fun layout -> str (" : " ^ (fmt_layout layout.txt)))
+  $ Option.value_map layout_opt ~default:(str "") ~f:(fun layout ->
+        str (" : " ^ fmt_layout layout.txt) )
 
-(* let fmt_type_var_loc c s =
-  Cmts.fmt c s.loc @@
-  fmt_type_var s.txt *)
-
-
+(* let fmt_type_var_loc c s = Cmts.fmt c s.loc @@ fmt_type_var s.txt *)
 
 let fmt_type_var_no_tick_loc c s =
   let fmt_type_var_no_tick (name_opt, layout_opt) =
     let name = Option.value ~default:"_" name_opt in
     str name
-    $ Option.value_map layout_opt
-        ~default:(str "")
-        ~f:(fun layout -> str (" : " ^ (fmt_layout layout.txt)))
+    $ Option.value_map layout_opt ~default:(str "") ~f:(fun layout ->
+          str (" : " ^ fmt_layout layout.txt) )
   in
-  Cmts.fmt c s.loc @@
-  fmt_type_var_no_tick s.txt
+  Cmts.fmt c s.loc @@ fmt_type_var_no_tick s.txt
 
 let split_global_flags_from_attrs conf atrs =
   match
@@ -3429,7 +3422,7 @@ and fmt_tydcl_params c ctx params =
         ( false
         , match p.ptyp_desc with
           | Ptyp_var (_, l) -> Option.is_some l
-          | _ -> false) )
+          | _ -> false ) )
     | _ :: _ :: _ -> (false, true)
   in
   fmt_if_k (not empty)

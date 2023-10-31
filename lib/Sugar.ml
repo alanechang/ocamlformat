@@ -287,8 +287,7 @@ let rec polynewtype_ conf cmts pvars body relocs =
   | [], Pexp_constraint (exp, typ) ->
       let relocs = (body.pexp_loc, exp.pexp_loc) :: relocs in
       Some (sub_typ ~ctx typ, sub_exp conf ~ctx exp, relocs)
-  | pvar :: pvars, Pexp_newtype (nvar, exp)
-    when eq pvar.txt nvar.txt ->
+  | pvar :: pvars, Pexp_newtype (nvar, exp) when eq pvar.txt nvar.txt ->
       let relocs = (nvar.loc, pvar.loc) :: relocs in
       polynewtype_ conf cmts pvars exp relocs
   | _ -> None
