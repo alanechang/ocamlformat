@@ -200,9 +200,17 @@ let paren_kind i ppf = function
   | Brace -> line i ppf "Brace\n"
   | Bracket -> line i ppf "Bracket\n"
 
+
+let fmt_ty_var ppf (name, _layout) =
+  Format.fprintf ppf "%s" (Option.value ~default:"_" name)
+
+let fmt_ty_var_loc ppf x =
+  let (name, _layout) = x.txt in
+  Format.fprintf ppf "%s %a" (Option.value ~default:"_" name) fmt_location x.loc
+
 let typevars ppf vs =
   List.iter (fun x ->
-      fprintf ppf " %a %a" Pprintast.tyvar x.txt fmt_location x.loc) vs
+      fprintf ppf " %a" fmt_ty_var_loc x) vs
 
 let variant_var i ppf (x : variant_var) =
   line i ppf "variant_var %a\n" fmt_location x.loc;
@@ -214,7 +222,8 @@ let rec core_type i ppf x =
   let i = i+1 in
   match x.ptyp_desc with
   | Ptyp_any -> line i ppf "Ptyp_any\n";
-  | Ptyp_var (s) -> line i ppf "Ptyp_var %s\n" s;
+  | Ptyp_var (s) ->
+    line i ppf "Ptyp_var %a\n" fmt_ty_var s;
   | Ptyp_arrow (params, ct2) ->
       line i ppf "Ptyp_arrow\n";
       list i arrow_param ppf params;
@@ -236,7 +245,7 @@ let rec core_type i ppf x =
       line i ppf "Ptyp_class %a\n" fmt_longident_loc li;
       list i core_type ppf l
   | Ptyp_alias (ct, s) ->
-      line i ppf "Ptyp_alias \"%a\"\n" fmt_string_loc s;
+      line i ppf "Ptyp_alias \"%a\"\n" fmt_ty_var_loc s;
       core_type i ppf ct;
   | Ptyp_poly (sl, ct) ->
       line i ppf "Ptyp_poly%a\n" typevars sl;
@@ -471,6 +480,9 @@ and expression i ppf x =
       class_structure i ppf s
   | Pexp_newtype (s, e) ->
       line i ppf "Pexp_newtype %a\n" fmt_string_loc s;
+      expression i ppf e
+  | Pexp_newtype_with_layout_annotation (s, _l, e) ->
+      line i ppf "Pexp_newtype_with_layout_annotation %a\n" fmt_string_loc s;
       expression i ppf e
   | Pexp_pack (me, pt) ->
       line i ppf "Pexp_pack\n";

@@ -372,6 +372,8 @@ let wrap_type_annotation ~loc newtypes core_type body =
   let mk_newtypes = mk_newtypes ~loc in
   let exp = mkexp(Pexp_constraint(body,core_type)) in
   let exp = mk_newtypes newtypes exp in
+  let newtypes = List.map (fun name_loc ->
+    mkloc (Some name_loc.txt, None) (make_loc loc)) newtypes in
   (exp, ghtyp(Ptyp_poly(newtypes, core_type)))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
@@ -3060,7 +3062,7 @@ type_parameter:
 type_variable:
   mktyp(
     QUOTE tyvar = ident
-      { Ptyp_var tyvar }
+      { Ptyp_var (Some tyvar, None) }
   | UNDERSCORE
       { Ptyp_any }
   ) { $1 }
@@ -3294,7 +3296,7 @@ with_type_binder:
 /* Polymorphic types */
 
 %inline typevar:
-  QUOTE mkrhs(ident)
+  QUOTE mkrhs(ident {Some $1, None})
     { $2 }
 ;
 %inline typevar_list:
@@ -3349,7 +3351,7 @@ alias_type:
     function_type
       { $1 }
   | mktyp(
-      ty = alias_type AS QUOTE tyvar = mkrhs(ident)
+      ty = alias_type AS QUOTE tyvar = mkrhs(ident {Some $1, None})
         { Ptyp_alias(ty, tyvar) }
     )
     { $1 }
@@ -3466,7 +3468,7 @@ atomic_type:
       { wrap_typ_attrs ~loc:$sloc (reloc_typ ~loc:$sloc $4) $3 }
   | mktyp( /* begin mktyp group */
       QUOTE ident
-        { Ptyp_var $2 }
+        { Ptyp_var (Some $2, None) }
     | UNDERSCORE
         { Ptyp_any }
     | tys = actual_type_parameters

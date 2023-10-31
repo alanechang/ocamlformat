@@ -425,7 +425,9 @@ let wrap_type_annotation ~loc newtypes core_type body =
   let mk_newtypes = mk_newtypes ~loc in
   let exp = mkexp(Pexp_constraint(body,core_type)) in
   let exp = mk_newtypes newtypes exp in
-  let typ = Ptyp_poly_with_layout_annotation (newtypes, core_type) in
+  let newtypes = List.map (fun (name_loc, layout) ->
+    mkloc (Some name_loc.txt, layout) (make_loc loc)) newtypes in
+  let typ = Ptyp_poly (newtypes, core_type) in
   (exp, ghtyp(typ))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
@@ -2267,7 +2269,7 @@ label_let_pattern:
         mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
   | x = label_var COLON
           cty = mktyp (vars = typevar_list DOT ty = core_type
-                  { Ptyp_poly_with_layout_annotation (vars, ty) })
+                  { Ptyp_poly (vars, ty) })
       { let lab, pat = x in
         lab,
         mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
@@ -2290,7 +2292,7 @@ let_pattern:
       pat = pattern
       COLON
       cty = mktyp(vars = typevar_list DOT ty = core_type
-              { Ptyp_poly_with_layout_annotation (vars, ty) })
+              { Ptyp_poly (vars, ty) })
         { Ppat_constraint(pat, cty) })
       { $1 }
 ;
@@ -3266,7 +3268,7 @@ layout_attr:
   attrs=attributes
   COLON
   layout=layout_annotation
-  { let descr = Ptyp_var_with_layout_annotation (name, layout) in
+  { let descr = Ptyp_var (name, Some layout) in
     mktyp ~loc:$sloc ~attrs descr }
 ;
 
@@ -3284,7 +3286,7 @@ type_parameter:
 %inline type_variable:
   mktyp(
     QUOTE tyvar = ident
-      { Ptyp_var tyvar }
+      { Ptyp_var (Some tyvar, None) }
   | UNDERSCORE
       { Ptyp_any }
   ) { $1 }
@@ -3345,9 +3347,9 @@ generic_constructor_declaration(opening):
 %inline constructor_declaration(opening):
   d = generic_constructor_declaration(opening)
     {
-      let cid, vars_layouts, args, res, attrs, loc, info = d in
-      Jane_syntax.Layouts.constructor_declaration_of
-        cid ~vars_layouts ~args ~res ~attrs ~loc ~info
+      let cid, vars, args, res, attrs, loc, info = d in
+      Type.constructor
+        cid ~vars ~args ?res ~attrs ~loc ~info
     }
 ;
 str_exception_declaration:
@@ -3381,7 +3383,7 @@ sig_exception_declaration:
       let ext_ctor =
         Te.constructor
           ~loc ~attrs:(attrs1 @ attrs2) ~docs id
-          (Pext_decl_with_layout_annotation (vars_layouts, args, res))
+          (Pext_decl (vars_layouts, args, res))
       in
       Te.mk_exception ~attrs ext_ctor, ext }
 ;
@@ -3392,7 +3394,7 @@ sig_exception_declaration:
             ~loc:(make_loc $sloc)
             ~attrs:$3
             $1
-            (Pext_decl_with_layout_annotation (vars_layouts, args, res)) }
+            (Pext_decl (vars_layouts, args, res)) }
 ;
 
 generalized_constructor_arguments:
@@ -3487,7 +3489,7 @@ label_declaration_semi:
       let name, vars_layouts, args, res, attrs, loc, info = d in
       Te.constructor
         ~loc ~attrs ~info name
-        (Pext_decl_with_layout_annotation (vars_layouts, args, res))
+        (Pext_decl (vars_layouts, args, res))
     }
 ;
 extension_constructor_rebind(opening):
@@ -3542,10 +3544,13 @@ with_type_binder:
 /* Polymorphic types */
 
 %inline typevar: (* : string with_loc * layout_annotation option *)
-    QUOTE mkrhs(ident)
-      { ($2, None) }
-    | LPAREN QUOTE tyvar=mkrhs(ident) COLON layout=layout_annotation RPAREN
-      { (tyvar, Some layout) }
+    QUOTE mkrhs(ident {(Some $1, None)})
+      { $2 }
+    | LPAREN QUOTE mkrhs(
+        ident COLON layout=layout_annotation
+        { (Some $1, Some layout) }
+    ) RPAREN
+      { $3 }
 ;
 %inline typevar_list:
   (* : (string with_loc * layout_annotation option) list *)
@@ -3554,7 +3559,7 @@ with_type_binder:
 ;
 %inline poly(X):
   typevar_list DOT X
-    { Ptyp_poly_with_layout_annotation($1, $3) }
+    { Ptyp_poly ($1, $3) }
 ;
 possibly_poly(X):
   X
@@ -3600,15 +3605,18 @@ alias_type:
     function_type
       { $1 }
   | mktyp(
-      ty = alias_type AS QUOTE tyvar = mkrhs(ident)
+      ty = alias_type AS QUOTE tyvar = mkrhs(ident {Some $1, None})
         { Ptyp_alias(ty, tyvar) }
     | aliased_type = alias_type AS
       LPAREN
-      name = tyvar_name_or_underscore
-      COLON
-      layout = layout_annotation
+      tyvar=mkrhs(
+        name = tyvar_name_or_underscore
+        COLON
+        layout = layout_annotation
+        {name, Some layout}
+      )
       RPAREN
-        { Ptyp_alias_with_layout_annotation (aliased_type, name, layout) }
+        { Ptyp_alias (aliased_type, tyvar) }
     )
     { $1 }
 ;
@@ -3673,7 +3681,7 @@ strict_function_type:
 %inline param_type:
   | mktyp(
     LPAREN vars = typevar_list DOT ty = core_type RPAREN
-      { Ptyp_poly_with_layout_annotation (vars, ty) }
+      { Ptyp_poly (vars, ty) }
     )
     { $1 }
   | ty = tuple_type
@@ -3724,7 +3732,7 @@ atomic_type:
       { wrap_typ_attrs ~loc:$sloc (reloc_typ ~loc:$sloc $4) $3 }
   | mktyp( /* begin mktyp group */
       QUOTE ident
-        { Ptyp_var $2 }
+        { Ptyp_var (Some $2, None) }
     | UNDERSCORE
         { Ptyp_any }
     | tys = actual_type_parameters
@@ -3760,9 +3768,9 @@ atomic_type:
     | extension
         { Ptyp_extension $1 }
     | LPAREN QUOTE name=ident COLON layout=layout_annotation RPAREN
-      { Ptyp_var_with_layout_annotation (Some name, layout) }
+      { Ptyp_var (Some name, Some layout) }
   | LPAREN UNDERSCORE COLON layout=layout_annotation RPAREN
-      { Ptyp_var_with_layout_annotation (None, layout) }
+      { Ptyp_var (None, Some layout) }
 
   )
   { $1 } /* end mktyp group */

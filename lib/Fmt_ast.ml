@@ -535,12 +535,24 @@ let fmt_quoted_string key ext s = function
         (str (Format_.sprintf "|%s}" delim))
         (str s)
 
-let fmt_type_var s =
+let fmt_layout = function
+  | Any -> "any"
+  | Value -> "value"
+  | Void -> "void"
+  | Immediate64 -> "immediate64"
+  | Immediate -> "immediate"
+  | Float64 -> "float64"
+
+let fmt_type_var (name_opt, layout_opt) =
+  let name = Option.value ~default:"_" name_opt in
   str "'"
   (* [' a'] is a valid type variable, the space is required to not lex as a
      char. https://github.com/ocaml/ocaml/pull/2034 *)
-  $ fmt_if (String.length s > 1 && Char.equal s.[1] '\'') " "
-  $ str s
+  $ fmt_if (String.length name > 1 && Char.equal name.[1] '\'') " "
+  $ str name
+  $ Option.value_map layout_opt
+      ~default:(str "")
+      ~f:(fun layout -> str (fmt_layout layout.txt))
 
 let split_global_flags_from_attrs conf atrs =
   match
