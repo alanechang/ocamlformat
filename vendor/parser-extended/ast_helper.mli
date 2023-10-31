@@ -71,7 +71,7 @@ module Typ :
     val attr: core_type -> attribute -> core_type
 
     val any: ?loc:loc -> ?attrs:attrs -> unit -> core_type
-    val var: ?loc:loc -> ?attrs:attrs -> string -> core_type
+    val var: ?loc:loc -> ?attrs:attrs -> ty_var -> core_type
     val arrow: ?loc:loc -> ?attrs:attrs -> arrow_param list -> core_type
                -> core_type
     val tuple: ?loc:loc -> ?attrs:attrs -> core_type list -> core_type
@@ -79,10 +79,10 @@ module Typ :
     val object_: ?loc:loc -> ?attrs:attrs -> object_field list
                    -> obj_closed_flag -> core_type
     val class_: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> core_type
-    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> str -> core_type
+    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> ty_var with_loc -> core_type
     val variant: ?loc:loc -> ?attrs:attrs -> row_field list -> closed_flag
                  -> variant_var list option -> core_type
-    val poly: ?loc:loc -> ?attrs:attrs -> str list -> core_type -> core_type
+    val poly: ?loc:loc -> ?attrs:attrs -> ty_var with_loc list -> core_type -> core_type
     val package: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
                  -> core_type
     val extension: ?loc:loc -> ?attrs:attrs -> extension -> core_type
@@ -217,6 +217,7 @@ module Val:
 module Type:
   sig
     val mk: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?text:text ->
+      ?layout:attribute ->
       ?params:(core_type * variance_and_injectivity) list ->
       ?cstrs:(core_type * core_type * loc) list ->
       ?kind:type_kind -> ?priv:private_flag -> ?manifest:core_type -> str ->
