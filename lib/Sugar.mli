@@ -101,7 +101,7 @@ module Let_binding : sig
     { lb_op: string loc
     ; lb_pat: pattern Ast.xt
     ; lb_typ:
-        [ `Polynewtype of label loc list * core_type Ast.xt
+        [ `Polynewtype of ty_var loc list * core_type Ast.xt
         | `Coerce of core_type Ast.xt option * core_type Ast.xt
         | `Other of arg_kind list * core_type Ast.xt
         | `None of arg_kind list ]

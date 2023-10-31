@@ -320,7 +320,7 @@ module Let_binding = struct
     { lb_op: string loc
     ; lb_pat: pattern xt
     ; lb_typ:
-        [ `Polynewtype of label loc list * core_type xt
+        [ `Polynewtype of ty_var loc list * core_type xt
         | `Coerce of core_type xt option * core_type xt
         | `Other of arg_kind list * core_type xt
         | `None of arg_kind list ]

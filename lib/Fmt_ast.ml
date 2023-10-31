@@ -3119,6 +3119,10 @@ and fmt_class_field_kind c ctx = function
               (e, Some ({ptyp_desc= Ptyp_poly (poly_args, _); _} as poly))
         ; pexp_loc
         ; _ } ) -> (
+      let eq t1 t2 =
+        let get t = Option.value ~default:"_" (fst t) in
+        String.equal (get t1) (get t2)
+      in
       let rec cleanup names e args' =
         match (e, args') with
         | {pexp_desc= Pexp_constraint (e, t); _}, [] ->
@@ -4568,7 +4572,7 @@ and fmt_value_binding c ~rec_flag ?ext ?in_ ?epi ctx
           fmt_sep ":"
           $ hvbox 0
               ( str "type "
-              $ list pvars " " (fmt_str_loc c)
+              $ list pvars " " (fmt_type_var c)
               $ fmt ".@ " $ fmt_core_type c xtyp )
         in
         ([], fmt_cstr)
