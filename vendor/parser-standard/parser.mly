@@ -758,7 +758,7 @@ end = struct
         mkpat ~loc (Ppat_constant const_value)
     | Unboxed const_unboxed ->
       Jane_syntax.Layouts.pat_of
-        ~loc:(make_loc loc) ~attrs:[] (Lexp_constant const_unboxed)
+        ~loc:(make_loc loc) ~attrs:[] (Lpat_constant const_unboxed)
 
   let assert_is_value ~loc ~where : t -> Parsetree.constant = function
     | Value x -> x
