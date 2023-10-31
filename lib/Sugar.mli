@@ -27,7 +27,7 @@ val decompose_arrow :
 
 type arg_kind =
   | Val of bool * arg_label * pattern Ast.xt * expression Ast.xt option
-  | Newtypes of string loc list
+  | Newtypes of ty_var loc list
 
 val fun_ :
      Conf.t

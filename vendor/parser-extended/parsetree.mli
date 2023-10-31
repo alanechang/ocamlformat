@@ -441,7 +441,7 @@ and expression_desc =
            {{!class_field_kind.Cfk_concrete}[Cfk_concrete]} for methods (not
            values). *)
   | Pexp_object of class_structure  (** [object ... end] *)
-  | Pexp_newtype of string loc * expression  (** [fun (type t) -> E] *)
+  | Pexp_newtype of ty_var loc * expression  (** [fun (type t) -> E] *)
   | Pexp_pack of module_expr * package_type option
       (** - [(module M)] is represented as [Pexp_pack(M, None)]
           - [(module M : S)] is represented as [Pexp_pack(M, Some S)] *)
@@ -461,10 +461,6 @@ and expression_desc =
   | Pexp_indexop_access of indexop_access
   | Pexp_prefix of string loc * expression  (** [op E] *)
   | Pexp_infix of string loc * expression * expression  (** [E1 op E2] *)
-
-  (* Jane Street extension *)
-  | Pexp_newtype_with_layout_annotation of string loc * layout_annotation * expression
-  (* End Jane Street extension *)
 
 and indexop_access =
   {

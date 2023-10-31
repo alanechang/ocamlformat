@@ -57,7 +57,7 @@ let decompose_arrow conf ctx ctl ct2 =
 
 type arg_kind =
   | Val of bool * arg_label * pattern xt * expression xt option
-  | Newtypes of string loc list
+  | Newtypes of ty_var loc list
 
 let fun_ conf cmts ?(will_keep_first_ast_node = true) xexp =
   let rec fun_ ?(will_keep_first_ast_node = false) ({ast= exp; _} as xexp) =
@@ -279,12 +279,16 @@ let mod_with pmty =
 
 let rec polynewtype_ conf cmts pvars body relocs =
   let ctx = Exp body in
+  let eq t1 t2 =
+    let get t = Option.value ~default:"_" (fst t) in
+    String.equal (get t1) (get t2)
+  in
   match (pvars, body.pexp_desc) with
   | [], Pexp_constraint (exp, typ) ->
       let relocs = (body.pexp_loc, exp.pexp_loc) :: relocs in
       Some (sub_typ ~ctx typ, sub_exp conf ~ctx exp, relocs)
   | pvar :: pvars, Pexp_newtype (nvar, exp)
-    when String.equal pvar.txt nvar.txt ->
+    when eq pvar.txt nvar.txt ->
       let relocs = (nvar.loc, pvar.loc) :: relocs in
       polynewtype_ conf cmts pvars exp relocs
   | _ -> None

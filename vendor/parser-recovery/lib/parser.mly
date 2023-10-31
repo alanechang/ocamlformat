@@ -364,7 +364,8 @@ let exp_of_label lbl =
 
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
-  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (newtype, exp)))
+  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (
+    Location.map (fun name -> (Some name, None)) newtype, exp)))
     newtypes exp
 
 let wrap_type_annotation ~loc newtypes core_type body =

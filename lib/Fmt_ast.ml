@@ -554,6 +554,19 @@ let fmt_type_var (name_opt, layout_opt) =
       ~default:(str "")
       ~f:(fun layout -> str (fmt_layout layout.txt))
 
+let fmt_type_var_loc c s =
+  Cmts.fmt c s.loc @@
+  let (name_opt, layout_opt) = s.txt in
+  let name = Option.value ~default:"_" name_opt in
+  str "'"
+  (* [' a'] is a valid type variable, the space is required to not lex as a
+      char. https://github.com/ocaml/ocaml/pull/2034 *)
+  $ fmt_if (String.length name > 1 && Char.equal name.[1] '\'') " "
+  $ str name
+  $ Option.value_map layout_opt
+      ~default:(str "")
+      ~f:(fun layout -> str (fmt_layout layout.txt))
+
 let split_global_flags_from_attrs conf atrs =
   match
     List.partition_map atrs ~f:(fun a ->
@@ -1412,7 +1425,7 @@ and fmt_fun_args c args =
     | Newtypes names ->
         cbox 0
           (Params.parens c.conf
-             (str "type " $ list names "@ " (fmt_str_loc c)) )
+             (str "type " $ list names "@ " (fmt_type_var_loc c)) )
   in
   list args "@;" fmt_fun_arg
 
@@ -3129,7 +3142,7 @@ and fmt_class_field_kind c ctx = function
             Some (List.rev names, t, e)
         | ( {pexp_desc= Pexp_newtype (({txt; _} as newtyp), body); _}
           , {txt= txt'; _} :: args )
-          when String.equal txt txt' ->
+          when eq txt txt' ->
             cleanup (newtyp :: names) body args
         | _ -> None
       in
@@ -3140,7 +3153,7 @@ and fmt_class_field_kind c ctx = function
           in
           Cmts.relocate c.cmts ~src:pexp_loc ~before ~after:e.pexp_loc ;
           ( fmt "@ : type "
-            $ list args "@ " (fmt_str_loc c)
+            $ list args "@ " (fmt_type_var_loc c)
             $ fmt_core_type ~pro:"." ~pro_space:false c (sub_typ ~ctx t)
           , noop
           , fmt "@;<1 2>="
@@ -4572,7 +4585,7 @@ and fmt_value_binding c ~rec_flag ?ext ?in_ ?epi ctx
           fmt_sep ":"
           $ hvbox 0
               ( str "type "
-              $ list pvars " " (fmt_type_var c)
+              $ list pvars " " (fmt_type_var_loc c)
               $ fmt ".@ " $ fmt_core_type c xtyp )
         in
         ([], fmt_cstr)

@@ -479,10 +479,8 @@ and expression i ppf x =
       line i ppf "Pexp_object\n";
       class_structure i ppf s
   | Pexp_newtype (s, e) ->
-      line i ppf "Pexp_newtype %a\n" fmt_string_loc s;
-      expression i ppf e
-  | Pexp_newtype_with_layout_annotation (s, _l, e) ->
-      line i ppf "Pexp_newtype_with_layout_annotation %a\n" fmt_string_loc s;
+      line i ppf "Pexp_newtype %a\n" fmt_string_loc
+        (Location.map (fun (n, _) -> Option.value ~default:"_" n) s);
       expression i ppf e
   | Pexp_pack (me, pt) ->
       line i ppf "Pexp_pack\n";

@@ -414,10 +414,7 @@ let exp_of_label lbl =
 
 let mk_newtypes ~loc newtypes exp =
   let mk_one (name, layout) exp =
-    mkexp ~loc @@ match layout with
-    | None -> Pexp_newtype (name, exp)
-    | Some layout -> Pexp_newtype_with_layout_annotation (name, layout, exp)
-  in
+    mkexp ~loc (Pexp_newtype (Location.map (fun name -> (Some name, layout)) name, exp)) in
   List.fold_right mk_one newtypes exp
 
 let wrap_type_annotation ~loc newtypes core_type body =

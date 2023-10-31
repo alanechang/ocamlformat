@@ -184,7 +184,7 @@ module Exp:
     val poly: ?loc:loc -> ?attrs:attrs -> expression -> core_type option
               -> expression
     val object_: ?loc:loc -> ?attrs:attrs -> class_structure -> expression
-    val newtype: ?loc:loc -> ?attrs:attrs -> str -> expression -> expression
+    val newtype: ?loc:loc -> ?attrs:attrs -> ty_var with_loc -> expression -> expression
     val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> package_type option
               -> expression
     val open_: ?loc:loc -> ?attrs:attrs -> lid -> expression -> expression
