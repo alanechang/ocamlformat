@@ -197,6 +197,11 @@ and core_type_desc =
 
   (* Jane Street extension *)
   | Ptyp_constr_unboxed of Longident.t loc * core_type list
+  | Ptyp_var_with_layout_annotation of string option * layout_annotation
+  | Ptyp_poly_with_layout_annotation of
+    (string loc * layout_annotation option) list * core_type
+  | Ptyp_alias_with_layout_annotation of
+    core_type * string option * layout_annotation
   (* End Jane Street extension *)
 
 and package_type = Longident.t loc * (Longident.t loc * core_type) list
@@ -462,6 +467,10 @@ and expression_desc =
   | Pexp_prefix of string loc * expression  (** [op E] *)
   | Pexp_infix of string loc * expression * expression  (** [E1 op E2] *)
 
+  (* Jane Street extension *)
+  | Pexp_newtype_with_layout_annotation of string loc * layout_annotation * expression
+  (* End Jane Street extension *)
+
 and indexop_access =
   {
     pia_lhs: expression;
@@ -674,6 +683,12 @@ and extension_constructor_kind =
        *)
   | Pext_rebind of Longident.t loc
   (** [Pext_rebind(D)] re-export the constructor [D] with the new name [C] *)
+
+  (* Jane Street extension *)
+  | Pext_decl_with_layout_annotation of (string loc * layout_annotation option) list *
+                                        constructor_arguments *
+                                        core_type option
+  (* End Jane Street extension *)
 
 (** {1 Class language} *)
 (** {2 Type expressions for the class language} *)
