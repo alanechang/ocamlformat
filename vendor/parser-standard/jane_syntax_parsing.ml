@@ -974,6 +974,8 @@ module type AST = sig
     Feature.t -> string list -> ?payload:payload -> ast -> ast
   val make_entire_jane_syntax :
     loc:Location.t -> Feature.t -> (unit -> ast) -> ast
+  val match_jane_syntax_piece :
+    Feature.t -> (ast -> string list -> 'a option) -> ast -> 'a
   val match_jane_syntax : Feature.t -> ast -> ast * string list
   val match_payload_jane_syntax :
     Feature.t -> ast -> ast * string list * payload
@@ -1139,6 +1141,15 @@ struct
 
   let raise_partial_payload_match feature ast subparts payload =
     raise_partial_general_match feature ast subparts (Some payload)
+
+  let match_jane_syntax_piece feature match_subparts ast =
+    let raise_error err =
+      raise (Desugaring_error.Error(location ast, feature, err))
+    in
+    let ast', subparts = match_jane_syntax feature ast in
+    match match_subparts ast' subparts with
+    | Some ext_ast -> ext_ast
+    | None -> raise_error (Bad_embedding (subparts, None))
 end
 
 module Make_extension_ast

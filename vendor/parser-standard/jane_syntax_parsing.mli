@@ -235,6 +235,27 @@
         -> (unit -> ast)
         -> ast
 
+      (** Given a *nested* term from one of our novel syntactic features that has
+          *already* been embedded in the AST by [make_jane_syntax], matches on the
+          name and AST of that embedding to lift it back to the Jane syntax AST.  By
+          "nested", this means the term ought to be a subcomponent of a
+          [make_entire_jane_syntax]-created term, created specifically by
+          [make_jane_syntax] with a nonempty list of components.
+
+          For example, to distinguish between the different terms in the
+          [-extension local] expression AST, we write:
+
+          {[
+            let of_expr =
+              Expression.match_jane_syntax_piece feature @@ fun expr -> function
+              | ["local"] -> Some (Lexp_local expr)
+              | ["exclave"] -> Some (Lexp_exclave expr)
+              | _ -> None
+          ]}
+      *)
+      val match_jane_syntax_piece
+      : Feature.t -> (ast -> string list -> 'a option) -> ast -> 'a
+
       (** Given an embedding of a term from one of our novel syntactic features into
           the AST, extracts the name (a [Feature.t]) and AST of that embedding.
           This should only be used when the list of components will be nonempty; the
