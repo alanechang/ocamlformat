@@ -789,7 +789,7 @@ module Layouts = struct
   (*******************************************************)
   (* Encoding expressions *)
 
-  let expr_of ~loc expr =
+  let expr_of ~loc ~attrs expr =
     let module Ast_of = Ast_of (Expression) (Ext) in
     (* See Note [Wrapping with make_entire_jane_syntax] *)
     Expression.make_entire_jane_syntax ~loc feature begin fun () ->
@@ -797,10 +797,12 @@ module Layouts = struct
       | Lexp_constant c ->
         let constant = constant_of c in
         Ast_of.wrap_jane_syntax ["unboxed"] @@
+        Expression.add_attributes attrs @@
         Ast_helper.Exp.constant constant
       | Lexp_newtype (name, layout, inner_expr) ->
         let payload = Encode.as_payload layout in
         Ast_of.wrap_jane_syntax ["newtype"] ~payload @@
+        Expression.add_attributes attrs @@
         Ast_helper.Exp.newtype name inner_expr
     end
 
@@ -824,11 +826,12 @@ module Layouts = struct
   (*******************************************************)
   (* Encoding patterns *)
 
-  let pat_of ~loc t =
+  let pat_of ~loc ~attrs t =
     Pattern.make_entire_jane_syntax ~loc feature begin fun () ->
       match t with
       | Lpat_constant c ->
         let constant = constant_of c in
+        Pattern.add_attributes attrs @@
         Ast_helper.Pat.constant constant
     end
 
@@ -846,7 +849,7 @@ module Layouts = struct
 
   module Type_of = Ast_of (Core_type) (Ext)
 
-  let type_of ~loc typ =
+  let type_of ~loc ~attrs typ =
     let exception No_wrap_necessary of Parsetree.core_type in
     try
       (* See Note [Wrapping with make_entire_jane_syntax] *)
@@ -855,6 +858,7 @@ module Layouts = struct
         | Ltyp_var { name; layout } ->
           let payload = Encode.as_payload layout in
           Type_of.wrap_jane_syntax ["var"] ~payload @@
+          Core_type.add_attributes attrs @@
           begin match name with
           | None -> Ast_helper.Typ.any ~loc ()
           | Some name -> Ast_helper.Typ.var ~loc name
@@ -862,7 +866,9 @@ module Layouts = struct
         | Ltyp_poly { bound_vars; inner_type } ->
           let var_names, layouts = List.split bound_vars in
           (* Pass the loc because we don't want a ghost location here *)
-          let tpoly = Ast_helper.Typ.poly ~loc var_names inner_type in
+          let tpoly =
+            Core_type.add_attributes attrs (Ast_helper.Typ.poly ~loc var_names inner_type)
+          in
           if List.for_all Option.is_none layouts
           then raise (No_wrap_necessary tpoly)
           else
@@ -875,7 +881,9 @@ module Layouts = struct
             | None -> "anon", aliased_type
             | Some name -> "named", Ast_helper.Typ.alias aliased_type name
           in
-          Type_of.wrap_jane_syntax ["alias"; has_name] ~payload inner_typ
+          Type_of.wrap_jane_syntax ["alias"; has_name] ~payload @@
+          Core_type.add_attributes attrs @@
+          inner_typ
       end
     with
       No_wrap_necessary result_type -> result_type
@@ -921,7 +929,7 @@ module Layouts = struct
 
   module Ext_ctor_of = Ast_of (Extension_constructor) (Ext)
 
-  let extension_constructor_of ~loc ~name ?info ?docs ext =
+  let extension_constructor_of ~loc ~name ~attrs ?info ?docs ext =
     (* using optional parameters to hook into existing defaulting
        in [Ast_helper.Te.decl], which seems unwise to duplicate *)
     let exception No_wrap_necessary of Parsetree.extension_constructor in
@@ -941,7 +949,9 @@ module Layouts = struct
               then raise (No_wrap_necessary ext_ctor)
               else
                 let payload = Encode.option_list_as_payload layouts in
-                Ext_ctor_of.wrap_jane_syntax ["ext"] ~payload ext_ctor
+                Ext_ctor_of.wrap_jane_syntax ["ext"] ~payload @@
+                Extension_constructor.add_attributes attrs @@
+                ext_ctor
           end
     with
       No_wrap_necessary ext_ctor -> ext_ctor
@@ -1042,7 +1052,7 @@ module Core_type = struct
   let ast_of ~loc (jtyp, attrs) =
     match jtyp with
     | Jtyp_local x -> Local.type_of ~loc ~attrs x
-    | Jtyp_layout x -> Core_type.add_attributes attrs @@ Layouts.type_of ~loc x
+    | Jtyp_layout x -> Layouts.type_of ~loc ~attrs x
 end
 
 module Constructor_argument = struct
@@ -1082,7 +1092,7 @@ module Expression = struct
     | Jexp_local            x -> Local.expr_of             ~loc ~attrs x
     | Jexp_comprehension    x -> Comprehensions.expr_of    ~loc ~attrs x
     | Jexp_immutable_array  x -> Immutable_arrays.expr_of  ~loc ~attrs x
-    | Jexp_layout x -> Expression.add_attributes attrs @@ Layouts.expr_of ~loc x
+    | Jexp_layout x -> Layouts.expr_of ~loc ~attrs x
 end
 
 module Pattern = struct
@@ -1105,7 +1115,7 @@ module Pattern = struct
   let ast_of ~loc (jpat, attrs) = match jpat with
     | Jpat_local x -> Local.pat_of ~loc ~attrs x
     | Jpat_immutable_array x -> Immutable_arrays.pat_of ~loc ~attrs x
-    | Jpat_layout x -> Pattern.add_attributes attrs @@ Layouts.pat_of ~loc x
+    | Jpat_layout x -> Layouts.pat_of ~loc ~attrs x
 end
 
 module Module_type = struct
@@ -1172,7 +1182,7 @@ module Extension_constructor = struct
     let ext_ctor =
       match t with
       | Jext_layout lext ->
-          Layouts.extension_constructor_of ~loc ~name ?info ?docs lext
+          Layouts.extension_constructor_of ~loc ~name ~attrs ?info ?docs lext
     in
-    Extension_constructor.add_attributes attrs ext_ctor
+    ext_ctor
 end
