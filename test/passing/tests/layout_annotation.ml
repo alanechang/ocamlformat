@@ -37,8 +37,6 @@ let x : (int as ('a : immediate)) list as ('b : value) = [3; 4; 5]
 
 let x : int list as ('a : immediate) = [3; 4; 5]
 
-(* CR layouts: error message could be phrased better *)
-
 (****************************************)
 (* Test 2: Annotation on type parameter *)
 
@@ -105,8 +103,6 @@ let f : ('a : any) -> 'a = fun x -> x
 
 let f : ('a : any). 'a -> 'a = fun x -> x
 
-(* CR layouts v2.5: This error message should change to complain about the
-   [fun x], not the arrow type. *)
 
 let f : ('a : float64). 'a -> 'a = fun x -> x
 
@@ -170,8 +166,6 @@ let f : type (a : float64). a -> a = fun x -> x
 
 let f : type (a : any). a -> a = fun x -> x
 
-(* CR layouts v2.5: This error message will change to complain about the fun
-   x, not the arrow type. *)
 
 (**************************************************)
 (* Test 7: Defaulting universal variable to value *)
@@ -230,8 +224,6 @@ let f x y (type a : immediate) (z : a) = z
 
 let f x y (type a : immediate) (z : a) = z
 
-(* CR layouts: canonicalizing the order of quantification here would reduce
-   wibbles in error messages *)
 
 external f : ('a : immediate). 'a -> 'a = "%identity"
 
