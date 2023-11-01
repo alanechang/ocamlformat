@@ -535,7 +535,7 @@ let fmt_quoted_string key ext s = function
         (str (Format_.sprintf "|%s}" delim))
         (str s)
 
-let fmt_layout = function
+let layout_to_string = function
   | Any -> "any"
   | Value -> "value"
   | Void -> "void"
@@ -543,13 +543,16 @@ let fmt_layout = function
   | Immediate -> "immediate"
   | Float64 -> "float64"
 
+let fmt_layout_str string = fmt "@ :@ " $ str string
+let fmt_layout_attr attr = fmt_layout_str attr.attr_name.txt
+
 let type_var_has_layout_annot (_, layout_opt) = Option.is_some layout_opt
 
 let fmt_type_var_no_tick (name_opt, layout_opt) =
   let name = Option.value ~default:"_" name_opt in
   str name
   $ Option.value_map layout_opt ~default:(str "") ~f:(fun layout ->
-        str (" : " ^ fmt_layout layout.txt) )
+    fmt_layout_str (layout_to_string layout.txt))
 
 let fmt_type_var s =
   let (name_opt, _) = s in
@@ -3427,7 +3430,7 @@ and fmt_tydcl_param c ctx ty =
      here. *)
   match ty.ptyp_attributes with
   | [] | _ :: _ :: _ -> noop
-  | [attr] -> fmt_if_k (is_layout attr) (fmt "@ :@ " $ str attr.attr_name.txt)
+  | [attr] -> fmt_if_k (is_layout attr) (fmt_layout_attr attr)
 
 and fmt_tydcl_params c ctx params =
   let empty, parenize =
@@ -3466,6 +3469,7 @@ and fmt_type_declaration c ?ext ?(pre = "") ctx ?name ?(eq = "=") decl =
       ; ptype_loc } =
     decl
   in
+  let layout_attrs, ptype_attributes = List.partition_tf ~f:is_layout ptype_attributes in
   update_config_maybe_disabled c ptype_loc ptype_attributes
   @@ fun c ->
   let fmt_abstract_manifest = function
@@ -3491,6 +3495,7 @@ and fmt_type_declaration c ?ext ?(pre = "") ctx ?name ?(eq = "=") decl =
           0
           ( fmt_tydcl_params c ctx ptype_params
           $ Option.value_map name ~default:(str txt) ~f:(fmt_longident_loc c)
+          $ fmt_opt (Option.map ~f:fmt_layout_attr (List.hd layout_attrs))
           )
       $ k )
   in
