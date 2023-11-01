@@ -895,14 +895,7 @@ and fmt_core_type c ?(box = true) ?pro ?(pro_space = true) ?constraint_ctx
           (list xt1N (arrow_sep c ~parens) (fmt_arrow_param c ctx))
   | Ptyp_constr (lid, []) -> fmt_longident_loc c lid
   | Ptyp_constr (lid, [t1]) ->
-      let parenize =
-        match t1.ptyp_desc with
-        | Ptyp_var s -> type_var_has_layout_annot s
-        | _ -> false
-      in
-      wrap_fits_breaks_if ~space:false c.conf parenize "(" ")"
-        (fmt_core_type c (sub_typ ~ctx t1))
-      $ fmt "@ " $ fmt_longident_loc c lid
+      fmt_core_type c (sub_typ ~ctx t1) $ fmt "@ " $ fmt_longident_loc c lid
   | Ptyp_constr (lid, t1N) ->
       wrap_fits_breaks c.conf "(" ")"
         (list t1N (Params.comma_sep c.conf)
