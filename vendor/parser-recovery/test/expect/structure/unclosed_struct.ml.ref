@@ -24,6 +24,7 @@
                 ptype_private = Public
                 ptype_manifest =
                   None
+                ptype_layout = none
             ]
         ]
 ]

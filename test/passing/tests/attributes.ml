@@ -183,7 +183,8 @@ module type A = sig
 end
 
 module M = struct
-  type t : immediate
+  type t
+  [@@immediate]
   (* ______________________________________ *)
   [@@deriving variants, sexp_of]
 end
