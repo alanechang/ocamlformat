@@ -3247,17 +3247,10 @@ layout_annotation: (* : layout_annotation *)
           mkloc (check_layout ~loc $1) loc }
 ;
 
-layout_string: (* : string with_loc *)
-  (* the [check_layout] just ensures this is the name of a layout *)
-  ident { let loc = make_loc $sloc in
-          ignore (check_layout ~loc $1 : const_layout);
-          mkloc $1 loc }
-;
-
 layout_attr:
   COLON
-  layout=layout_string
-    { Attr.mk ~loc:layout.loc layout (PStr []) }
+  layout_annotation
+    { $2 }
 ;
 
 %inline type_param_with_layout:

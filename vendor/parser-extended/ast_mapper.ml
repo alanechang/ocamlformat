@@ -224,10 +224,13 @@ module T = struct
        ptype_private;
        ptype_manifest;
        ptype_attributes;
-       ptype_loc} =
+       ptype_loc;
+       ptype_layout;
+      } =
     let loc = sub.location sub ptype_loc in
     let attrs = sub.attributes sub ptype_attributes in
     Type.mk ~loc ~attrs (map_loc sub ptype_name)
+      ?layout:(ptype_layout)
       ~params:(List.map (map_fst (sub.typ sub)) ptype_params)
       ~priv:(Flag.map_private sub ptype_private)
       ~cstrs:(List.map

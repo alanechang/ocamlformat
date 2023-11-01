@@ -542,6 +542,7 @@ and type_declaration =
      ptype_manifest: core_type option;  (** represents [= T] *)
      ptype_attributes: attributes;  (** [... [\@\@id1] [\@\@id2]] *)
      ptype_loc: Location.t;
+     ptype_layout: layout_annotation option;
     }
 (**
    Here are type declarations and their representation,

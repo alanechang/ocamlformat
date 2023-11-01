@@ -547,13 +547,15 @@ let layout_to_string = function
 
 let fmt_layout_str string = fmt "@ :@ " $ str string
 
+let fmt_layout l = fmt_layout_str (layout_to_string l)
+
 let fmt_layout_attr attr = fmt_layout_str attr.attr_name.txt
 
 let fmt_type_var_no_tick (name_opt, layout_opt) =
   let name = Option.value ~default:"_" name_opt in
   str name
   $ Option.value_map layout_opt ~default:(str "") ~f:(fun layout ->
-        fmt_layout_str (layout_to_string layout.txt) )
+        fmt_layout layout.txt )
 
 let fmt_type_var s =
   let name_opt, _ = s in
@@ -3471,11 +3473,9 @@ and fmt_type_declaration c ?ext ?(pre = "") ctx ?name ?(eq = "=") decl =
       ; ptype_private= priv
       ; ptype_manifest= m
       ; ptype_attributes
-      ; ptype_loc } =
+      ; ptype_loc
+      ; ptype_layout } =
     decl
-  in
-  let layout_attrs, ptype_attributes =
-    List.partition_tf ~f:is_layout ptype_attributes
   in
   update_config_maybe_disabled c ptype_loc ptype_attributes
   @@ fun c ->
@@ -3502,7 +3502,8 @@ and fmt_type_declaration c ?ext ?(pre = "") ctx ?name ?(eq = "=") decl =
           0
           ( fmt_tydcl_params c ctx ptype_params
           $ Option.value_map name ~default:(str txt) ~f:(fmt_longident_loc c)
-          $ fmt_opt (Option.map ~f:fmt_layout_attr (List.hd layout_attrs)) )
+          $ fmt_opt (Option.map ~f:(fun l -> fmt_layout l.txt) ptype_layout)
+          )
       $ k )
   in
   let fmt_manifest_kind =

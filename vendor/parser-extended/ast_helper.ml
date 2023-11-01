@@ -477,7 +477,6 @@ module Type = struct
       ?(priv = Public)
       ?manifest
       name =
-    let layout_attrs = Option.to_list layout in
     {
      ptype_name = name;
      ptype_params = params;
@@ -485,9 +484,9 @@ module Type = struct
      ptype_kind = kind;
      ptype_private = priv;
      ptype_manifest = manifest;
-     ptype_attributes =
-      layout_attrs @ add_text_attrs text (add_docs_attrs docs attrs);
+     ptype_attributes = add_text_attrs text (add_docs_attrs docs attrs);
      ptype_loc = loc;
+     ptype_layout = layout;
     }
 
   let constructor ?(loc = !default_loc) ?(attrs = []) ?(info = empty_info)

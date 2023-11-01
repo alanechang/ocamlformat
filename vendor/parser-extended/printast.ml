@@ -200,13 +200,23 @@ let paren_kind i ppf = function
   | Brace -> line i ppf "Brace\n"
   | Bracket -> line i ppf "Bracket\n"
 
+let layout_to_string = function
+  | Any -> "any"
+  | Value -> "value"
+  | Void -> "void"
+  | Immediate64 -> "immediate64"
+  | Immediate -> "immediate"
+  | Float64 -> "float64"
 
-let fmt_ty_var ppf (name, _layout) =
-  Format.fprintf ppf "%s" (Option.value ~default:"_" name)
+let fmt_layout_opt ppf l = Format.fprintf ppf "%s"
+  (Option.value ~default:"none" (Option.map (fun l -> layout_to_string l.txt) l))
+
+let fmt_ty_var ppf (name, layout) =
+  Format.fprintf ppf "%s:%a" (Option.value ~default:"_" name) fmt_layout_opt layout
+
 
 let fmt_ty_var_loc ppf x =
-  let (name, _layout) = x.txt in
-  Format.fprintf ppf "%s %a" (Option.value ~default:"_" name) fmt_location x.loc
+  Format.fprintf ppf "%a %a" fmt_ty_var x.txt fmt_location x.loc
 
 let typevars ppf vs =
   List.iter (fun x ->
@@ -564,7 +574,8 @@ and type_declaration i ppf x =
   type_kind (i+1) ppf x.ptype_kind;
   line i ppf "ptype_private = %a\n" fmt_private_flag x.ptype_private;
   line i ppf "ptype_manifest =\n";
-  option (i+1) core_type ppf x.ptype_manifest
+  option (i+1) core_type ppf x.ptype_manifest;
+  line i ppf "ptype_layout = %a\n" fmt_layout_opt x.ptype_layout
 
 and attribute i ppf k a =
   line i ppf "%s %a %a\n" k fmt_string_loc a.attr_name fmt_location a.attr_loc;
