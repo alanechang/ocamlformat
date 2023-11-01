@@ -413,19 +413,16 @@ let exp_of_label lbl =
   Exp.mk ~loc:lbl.loc (Pexp_ident (loc_lident lbl))
 
 let mk_newtypes ~loc newtypes exp =
-  let mk_one (name, layout) exp =
-    mkexp ~loc (Pexp_newtype (Location.map (fun name -> (Some name, layout)) name, exp)) in
-  List.fold_right mk_one newtypes exp
+  let mkexp = mkexp ~loc in
+  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (newtype, exp)))
+    newtypes exp
 
 let wrap_type_annotation ~loc newtypes core_type body =
   let mkexp, ghtyp = mkexp ~loc, ghtyp ~loc in
   let mk_newtypes = mk_newtypes ~loc in
   let exp = mkexp(Pexp_constraint(body,core_type)) in
   let exp = mk_newtypes newtypes exp in
-  let newtypes = List.map (fun (name_loc, layout) ->
-    mkloc (Some name_loc.txt, layout) (make_loc loc)) newtypes in
-  let typ = Ptyp_poly (newtypes, core_type) in
-  (exp, ghtyp(typ))
+  (exp, ghtyp(Ptyp_poly(newtypes, core_type)))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
   let ghexp = ghexp ~loc in
@@ -2345,9 +2342,11 @@ expr:
   | FUN ext_attributes LPAREN TYPE newtypes RPAREN fun_def
     { let loc = $sloc in
       wrap_exp_attrs ~loc (mk_newtypes ~loc $5 $7) $2 }
-  | FUN ext_attributes LPAREN TYPE mkrhs(LIDENT) COLON layout_annotation RPAREN fun_def
+  | FUN ext_attributes LPAREN TYPE
+    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    RPAREN fun_def
     { let loc = $sloc in
-      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [$5, Some $7] $9) $2 }
+      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [newtype] $7) $2 }
   | expr attribute
       { Exp.attr $1 $2 }
 /* BEGIN AVOID */
@@ -2790,8 +2789,10 @@ strict_binding:
       { let (l, o, p) = $1 in ghexp ~loc:$sloc (Pexp_fun(l, o, p, $2)) }
   | LPAREN TYPE newtypes RPAREN fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
-  | LPAREN TYPE mkrhs(LIDENT) COLON layout_annotation RPAREN fun_binding
-      { mk_newtypes ~loc:$sloc [$3, Some $5] $7 }
+  | LPAREN TYPE
+    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    RPAREN fun_binding
+      { mk_newtypes ~loc:$sloc [newtype] $5 }
 ;
 local_fun_binding:
     local_strict_binding
@@ -2806,8 +2807,10 @@ local_strict_binding:
       { let (l, o, p) = $1 in ghexp ~loc:$sloc (Pexp_fun(l, o, p, $2)) }
   | LPAREN TYPE newtypes RPAREN local_fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
-  | LPAREN TYPE mkrhs(LIDENT) COLON layout_annotation RPAREN fun_binding
-      { mk_newtypes ~loc:$sloc [$3, Some $5] $7 }
+  | LPAREN TYPE
+    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    RPAREN fun_binding
+      { mk_newtypes ~loc:$sloc [newtype] $5 }
 ;
 %inline match_cases:
   xs = preceded_or_separated_nonempty_llist(BAR, match_case)
@@ -2835,8 +2838,10 @@ fun_def:
       }
   | LPAREN TYPE newtypes RPAREN fun_def
       { mk_newtypes ~loc:$sloc $3 $5 }
-  | LPAREN TYPE mkrhs(LIDENT) COLON layout_annotation RPAREN fun_def
-      { mk_newtypes ~loc:$sloc [$3, Some $5] $7 }
+  | LPAREN TYPE
+    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    RPAREN fun_def
+      { mk_newtypes ~loc:$sloc [newtype] $5 }
 ;
 %inline expr_comma_list:
   es = separated_nontrivial_llist(COMMA, expr)
@@ -2890,9 +2895,11 @@ newtypes: (* : (string with_loc * layout_annotation option) list *)
     { $1 }
 
 newtype: (* : string with_loc * layout_annotation option *)
-    mkrhs(LIDENT)                     { $1, None }
-  | LPAREN name=mkrhs(LIDENT) COLON layout=layout_annotation RPAREN
-      { name, Some layout }
+    mkrhs(LIDENT { Some $1, None }) { $1 }
+  | LPAREN
+    mkrhs(name=LIDENT COLON layout=layout_annotation {Some name, Some layout})
+    RPAREN
+      { $2 }
 
 /* Patterns */
 
