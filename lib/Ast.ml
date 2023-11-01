@@ -1923,8 +1923,7 @@ end = struct
     | { ast= {ptyp_desc= Ptyp_poly _; _}
       ; ctx= Typ {ptyp_desc= Ptyp_arrow _; _} } ->
         true
-    | {ast= {ptyp_desc= Ptyp_var (_, l); _}; ctx= Typ _ | Str _ | Sig _}
-      when Option.is_some l ->
+    | {ast= {ptyp_desc= Ptyp_var (_, l); _}; ctx= _} when Option.is_some l ->
         true
     | _ -> (
       match ambig_prec (sub_ast ~ctx (Typ typ)) with
