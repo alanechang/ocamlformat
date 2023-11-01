@@ -6,6 +6,10 @@ val foo :
   -> 'k Jane_symbol.Map.t
   -> ('k, Sockaddr.t, 'cmp) Map.t
 
+type ttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttttt
+  :
+  value
+
 type t_value : value
 
 type t_imm : immediate
@@ -239,6 +243,18 @@ let f (x : ('a : immediate). 'a -> 'a) = (x 3, x true)
 
 type _ a = Mk : [> ] * ('a : immediate) -> int a
 
+module type S = sig
+  type _ a = Mk : [> ] * ('a : immediate) -> int a
+
+  val f_imm : ('a : immediate) ('b : value). 'a -> 'a
+
+  val f_val : ('a : value). 'a -> 'a
+
+  type (_ : value) g = MkG : ('a : immediate). 'a g
+
+  type t = int as (_ : immediate)
+end
+
 let f_imm : ('a : immediate). 'a -> 'a = fun x -> x
 
 let f_val : ('a : value). 'a -> 'a = fun x -> f_imm x
@@ -246,3 +262,7 @@ let f_val : ('a : value). 'a -> 'a = fun x -> f_imm x
 type (_ : value) g = MkG : ('a : immediate). 'a g
 
 type t = int as (_ : immediate)
+
+type t = (('a : value), ('b : value)) t2
+
+type ('a, 'b) t = ('a : value) * ('b : value)
