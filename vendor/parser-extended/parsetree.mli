@@ -148,7 +148,7 @@ and core_type_desc =
             - [T #tconstr]             when [l=[T]],
             - [(T1, ..., Tn) #tconstr] when [l=[T1 ; ... ; Tn]].
          *)
-  | Ptyp_alias of core_type * ty_var loc  (** [T as 'a]. *)
+  | Ptyp_alias of core_type * ty_var  (** [T as 'a]. *)
   | Ptyp_variant of row_field list * closed_flag * variant_var list option
       (** [Ptyp_variant([`A;`B], flag, labels)] represents:
             - [[ `A|`B ]]
@@ -164,7 +164,7 @@ and core_type_desc =
                       when [flag]   is {{!Asttypes.closed_flag.Closed}[Closed]},
                        and [labels] is [Some ["X";"Y"]].
          *)
-  | Ptyp_poly of ty_var loc list * core_type
+  | Ptyp_poly of ty_var list * core_type
       (** ['a1 ... 'an. T]
 
            Can only appear in the following context:
@@ -441,7 +441,7 @@ and expression_desc =
            {{!class_field_kind.Cfk_concrete}[Cfk_concrete]} for methods (not
            values). *)
   | Pexp_object of class_structure  (** [object ... end] *)
-  | Pexp_newtype of ty_var loc * expression  (** [fun (type t) -> E] *)
+  | Pexp_newtype of ty_var * expression  (** [fun (type t) -> E] *)
   | Pexp_pack of module_expr * package_type option
       (** - [(module M)] is represented as [Pexp_pack(M, None)]
           - [(module M : S)] is represented as [Pexp_pack(M, Some S)] *)
@@ -598,7 +598,7 @@ and label_declaration =
 and constructor_declaration =
     {
      pcd_name: string loc;
-     pcd_vars: ty_var loc list;
+     pcd_vars: ty_var list;
      pcd_args: constructor_arguments;
      pcd_res: core_type option;
      pcd_loc: Location.t;
@@ -653,7 +653,7 @@ and type_exception =
 (** Definition of a new exception ([exception E]). *)
 
 and extension_constructor_kind =
-  | Pext_decl of ty_var loc list * constructor_arguments * core_type option
+  | Pext_decl of ty_var list * constructor_arguments * core_type option
       (** [Pext_decl(existentials, c_args, t_opt)]
           describes a new extension constructor. It can be:
           - [C of T1 * ... * Tn] when:

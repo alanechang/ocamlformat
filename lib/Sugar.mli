@@ -27,7 +27,7 @@ val decompose_arrow :
 
 type arg_kind =
   | Val of bool * arg_label * pattern Ast.xt * expression Ast.xt option
-  | Newtypes of ty_var loc list
+  | Newtypes of ty_var list
 
 val fun_ :
      Conf.t
@@ -101,7 +101,7 @@ module Let_binding : sig
     { lb_op: string loc
     ; lb_pat: pattern Ast.xt
     ; lb_typ:
-        [ `Polynewtype of ty_var loc list * core_type Ast.xt
+        [ `Polynewtype of ty_var list * core_type Ast.xt
         | `Coerce of core_type Ast.xt option * core_type Ast.xt
         | `Other of arg_kind list * core_type Ast.xt
         | `None of arg_kind list ]

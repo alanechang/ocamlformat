@@ -364,8 +364,7 @@ let exp_of_label lbl =
 
 let mk_newtypes ~loc newtypes exp =
   let mkexp = mkexp ~loc in
-  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (
-    Location.map (fun name -> (Some name, None)) newtype, exp)))
+  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype ((newtype, None), exp)))
     newtypes exp
 
 let wrap_type_annotation ~loc newtypes core_type body =
@@ -373,9 +372,7 @@ let wrap_type_annotation ~loc newtypes core_type body =
   let mk_newtypes = mk_newtypes ~loc in
   let exp = mkexp(Pexp_constraint(body,core_type)) in
   let exp = mk_newtypes newtypes exp in
-  let newtypes = List.map (fun name_loc ->
-    mkloc (Some name_loc.txt, None) (make_loc loc)) newtypes in
-  (exp, ghtyp(Ptyp_poly(newtypes, core_type)))
+  (exp, ghtyp(Ptyp_poly(List.map (fun n -> n, None) newtypes, core_type)))
 
 let wrap_exp_attrs ~loc body (ext, attrs) =
   let ghexp = ghexp ~loc in
@@ -3062,8 +3059,8 @@ type_parameter:
 
 type_variable:
   mktyp(
-    QUOTE tyvar = ident
-      { Ptyp_var (Some tyvar, None) }
+    QUOTE tyvar = mkrhs(ident)
+      { Ptyp_var (tyvar, None) }
   | UNDERSCORE
       { Ptyp_any }
   ) { $1 }
@@ -3297,8 +3294,8 @@ with_type_binder:
 /* Polymorphic types */
 
 %inline typevar:
-  QUOTE mkrhs(ident {Some $1, None})
-    { $2 }
+  QUOTE mkrhs(ident)
+    { $2, None }
 ;
 %inline typevar_list:
   nonempty_llist(typevar)
@@ -3352,8 +3349,8 @@ alias_type:
     function_type
       { $1 }
   | mktyp(
-      ty = alias_type AS QUOTE tyvar = mkrhs(ident {Some $1, None})
-        { Ptyp_alias(ty, tyvar) }
+      ty = alias_type AS QUOTE name = mkrhs(ident)
+        { Ptyp_alias(ty, (name, None)) }
     )
     { $1 }
 ;
@@ -3468,8 +3465,8 @@ atomic_type:
   | LPAREN MODULE ext_attributes package_core_type RPAREN
       { wrap_typ_attrs ~loc:$sloc (reloc_typ ~loc:$sloc $4) $3 }
   | mktyp( /* begin mktyp group */
-      QUOTE ident
-        { Ptyp_var (Some $2, None) }
+      QUOTE mkrhs(ident)
+        { Ptyp_var ($2, None) }
     | UNDERSCORE
         { Ptyp_any }
     | tys = actual_type_parameters

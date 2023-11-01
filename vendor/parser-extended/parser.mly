@@ -2343,10 +2343,10 @@ expr:
     { let loc = $sloc in
       wrap_exp_attrs ~loc (mk_newtypes ~loc $5 $7) $2 }
   | FUN ext_attributes LPAREN TYPE
-    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    name=mkrhs(LIDENT) COLON layout=layout_annotation
     RPAREN fun_def
     { let loc = $sloc in
-      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [newtype] $7) $2 }
+      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [name, Some layout] $9) $2 }
   | expr attribute
       { Exp.attr $1 $2 }
 /* BEGIN AVOID */
@@ -2790,9 +2790,9 @@ strict_binding:
   | LPAREN TYPE newtypes RPAREN fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
   | LPAREN TYPE
-    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    name=mkrhs(LIDENT) COLON layout=layout_annotation
     RPAREN fun_binding
-      { mk_newtypes ~loc:$sloc [newtype] $5 }
+      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
 ;
 local_fun_binding:
     local_strict_binding
@@ -2808,9 +2808,9 @@ local_strict_binding:
   | LPAREN TYPE newtypes RPAREN local_fun_binding
       { mk_newtypes ~loc:$sloc $3 $5 }
   | LPAREN TYPE
-    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    name=mkrhs(LIDENT) COLON layout=layout_annotation
     RPAREN fun_binding
-      { mk_newtypes ~loc:$sloc [newtype] $5 }
+      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
 ;
 %inline match_cases:
   xs = preceded_or_separated_nonempty_llist(BAR, match_case)
@@ -2839,9 +2839,9 @@ fun_def:
   | LPAREN TYPE newtypes RPAREN fun_def
       { mk_newtypes ~loc:$sloc $3 $5 }
   | LPAREN TYPE
-    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+    name=mkrhs(LIDENT) COLON layout=layout_annotation
     RPAREN fun_def
-      { mk_newtypes ~loc:$sloc [newtype] $5 }
+      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
 ;
 %inline expr_comma_list:
   es = separated_nontrivial_llist(COMMA, expr)
@@ -2895,11 +2895,11 @@ newtypes: (* : (string with_loc * layout_annotation option) list *)
     { $1 }
 
 newtype: (* : string with_loc * layout_annotation option *)
-    mkrhs(LIDENT { Some $1, None }) { $1 }
+    mkrhs(LIDENT) { $1, None }
   | LPAREN
-    mkrhs(name=LIDENT COLON layout=layout_annotation {Some name, Some layout})
+    name=mkrhs(LIDENT) COLON layout=layout_annotation
     RPAREN
-      { $2 }
+      { name, Some layout }
 
 /* Patterns */
 
@@ -3261,7 +3261,7 @@ layout_attr:
 ;
 
 %inline type_param_with_layout:
-  name=tyvar_name_or_underscore
+  name=mkrhs(tyvar_name_or_underscore)
   attrs=attributes
   COLON
   layout=layout_annotation
@@ -3282,8 +3282,8 @@ type_parameter:
 
 %inline type_variable:
   mktyp(
-    QUOTE tyvar = ident
-      { Ptyp_var (Some tyvar, None) }
+    QUOTE tyvar = mkrhs(ident)
+      { Ptyp_var (tyvar, None) }
   | UNDERSCORE
       { Ptyp_any }
   ) { $1 }
@@ -3291,9 +3291,9 @@ type_parameter:
 
 %inline tyvar_name_or_underscore:
     QUOTE ident
-      { Some $2 }
+      { $2 }
   | UNDERSCORE
-      { None }
+      { "_" }
 ;
 
 type_variance:
@@ -3541,13 +3541,10 @@ with_type_binder:
 /* Polymorphic types */
 
 %inline typevar: (* : string with_loc * layout_annotation option *)
-    QUOTE mkrhs(ident {(Some $1, None)})
-      { $2 }
-    | LPAREN QUOTE mkrhs(
-        ident COLON layout=layout_annotation
-        { (Some $1, Some layout) }
-    ) RPAREN
-      { $3 }
+    QUOTE mkrhs(ident)
+      { $2, None }
+    | LPAREN QUOTE mkrhs(ident)  COLON layout=layout_annotation RPAREN
+      { $3, Some layout }
 ;
 %inline typevar_list:
   (* : (string with_loc * layout_annotation option) list *)
@@ -3602,18 +3599,15 @@ alias_type:
     function_type
       { $1 }
   | mktyp(
-      ty = alias_type AS QUOTE tyvar = mkrhs(ident {Some $1, None})
-        { Ptyp_alias(ty, tyvar) }
+      ty = alias_type AS QUOTE tyvar = mkrhs(ident)
+        { Ptyp_alias(ty, (tyvar, None)) }
     | aliased_type = alias_type AS
       LPAREN
-      tyvar=mkrhs(
-        name = tyvar_name_or_underscore
-        COLON
-        layout = layout_annotation
-        {name, Some layout}
-      )
+      name=mkrhs(tyvar_name_or_underscore)
+      COLON
+      layout = layout_annotation
       RPAREN
-        { Ptyp_alias (aliased_type, tyvar) }
+        { Ptyp_alias (aliased_type, (name, Some layout)) }
     )
     { $1 }
 ;
@@ -3728,8 +3722,8 @@ atomic_type:
   | LPAREN MODULE ext_attributes package_core_type RPAREN
       { wrap_typ_attrs ~loc:$sloc (reloc_typ ~loc:$sloc $4) $3 }
   | mktyp( /* begin mktyp group */
-      QUOTE ident
-        { Ptyp_var (Some $2, None) }
+      QUOTE mkrhs(ident)
+        { Ptyp_var ($2, None) }
     | UNDERSCORE
         { Ptyp_any }
     | tys = actual_type_parameters
@@ -3764,10 +3758,10 @@ atomic_type:
         { Ptyp_variant($3, Closed, Some $5) }
     | extension
         { Ptyp_extension $1 }
-    | LPAREN QUOTE name=ident COLON layout=layout_annotation RPAREN
-      { Ptyp_var (Some name, Some layout) }
-  | LPAREN UNDERSCORE COLON layout=layout_annotation RPAREN
-      { Ptyp_var (None, Some layout) }
+    | LPAREN QUOTE name=mkrhs(ident) COLON layout=layout_annotation RPAREN
+      { Ptyp_var (name, Some layout) }
+  | LPAREN mkrhs(UNDERSCORE {"_"}) COLON layout=layout_annotation RPAREN
+      { Ptyp_var ($2, Some layout) }
 
   )
   { $1 } /* end mktyp group */

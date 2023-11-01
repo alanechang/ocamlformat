@@ -79,10 +79,10 @@ module Typ :
     val object_: ?loc:loc -> ?attrs:attrs -> object_field list
                    -> obj_closed_flag -> core_type
     val class_: ?loc:loc -> ?attrs:attrs -> lid -> core_type list -> core_type
-    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> ty_var with_loc -> core_type
+    val alias: ?loc:loc -> ?attrs:attrs -> core_type -> ty_var -> core_type
     val variant: ?loc:loc -> ?attrs:attrs -> row_field list -> closed_flag
                  -> variant_var list option -> core_type
-    val poly: ?loc:loc -> ?attrs:attrs -> ty_var with_loc list -> core_type -> core_type
+    val poly: ?loc:loc -> ?attrs:attrs -> ty_var list -> core_type -> core_type
     val package: ?loc:loc -> ?attrs:attrs -> lid -> (lid * core_type) list
                  -> core_type
     val extension: ?loc:loc -> ?attrs:attrs -> extension -> core_type
@@ -184,7 +184,7 @@ module Exp:
     val poly: ?loc:loc -> ?attrs:attrs -> expression -> core_type option
               -> expression
     val object_: ?loc:loc -> ?attrs:attrs -> class_structure -> expression
-    val newtype: ?loc:loc -> ?attrs:attrs -> ty_var with_loc -> expression -> expression
+    val newtype: ?loc:loc -> ?attrs:attrs -> ty_var -> expression -> expression
     val pack: ?loc:loc -> ?attrs:attrs -> module_expr -> package_type option
               -> expression
     val open_: ?loc:loc -> ?attrs:attrs -> lid -> expression -> expression
@@ -224,7 +224,7 @@ module Type:
       type_declaration
 
     val constructor: ?loc:loc -> ?attrs:attrs -> ?info:info ->
-      ?vars:ty_var with_loc list -> ?args:constructor_arguments -> ?res:core_type ->
+      ?vars:ty_var list -> ?args:constructor_arguments -> ?res:core_type ->
       str ->
       constructor_declaration
     val field: ?loc:loc -> ?attrs:attrs -> ?info:info ->
@@ -245,7 +245,7 @@ module Te:
       str -> extension_constructor_kind -> extension_constructor
 
     val decl: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?info:info ->
-      ?vars:ty_var with_loc list -> ?args:constructor_arguments -> ?res:core_type ->
+      ?vars:ty_var list -> ?args:constructor_arguments -> ?res:core_type ->
       str ->
       extension_constructor
     val rebind: ?loc:loc -> ?attrs:attrs -> ?docs:docs -> ?info:info ->

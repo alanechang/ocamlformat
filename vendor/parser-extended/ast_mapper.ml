@@ -202,12 +202,14 @@ module T = struct
           (Flag.map_obj_closed sub o)
     | Ptyp_class (lid, tl) ->
         class_ ~loc ~attrs (map_loc sub lid) (List.map (sub.typ sub) tl)
-    | Ptyp_alias (t, s) -> alias ~loc ~attrs (sub.typ sub t) (map_loc sub s)
+    | Ptyp_alias (t, (n, l)) -> alias ~loc ~attrs (sub.typ sub t)
+        (map_loc sub n, Option.map (map_loc sub) l)
     | Ptyp_variant (rl, b, ll) ->
         variant ~loc ~attrs (List.map (row_field sub) rl) b
           (map_opt (List.map (variant_var sub)) ll)
     | Ptyp_poly (sl, t) -> poly ~loc ~attrs
-                             (List.map (map_loc sub) sl) (sub.typ sub t)
+        (List.map (fun (n, l) -> (map_loc sub n, Option.map (map_loc sub) l)) sl)
+        (sub.typ sub t)
     | Ptyp_package pt ->
         let lid, l = map_package_type sub pt in
         package ~loc ~attrs lid l
@@ -276,7 +278,8 @@ module T = struct
 
   let map_extension_constructor_kind sub = function
       Pext_decl(vars, ctl, cto) ->
-        Pext_decl(List.map (map_loc sub) vars,
+        Pext_decl(List.map
+                    (fun (n, l) -> map_loc sub n, Option.map (map_loc sub) l) vars,
                   map_constructor_arguments sub ctl,
                   map_opt (sub.typ sub) cto)
     | Pext_rebind li ->
@@ -559,8 +562,8 @@ module E = struct
     | Pexp_poly (e, t) ->
         poly ~loc ~attrs (sub.expr sub e) (map_opt (sub.typ sub) t)
     | Pexp_object cls -> object_ ~loc ~attrs (sub.class_structure sub cls)
-    | Pexp_newtype (s, e) ->
-        newtype ~loc ~attrs (map_loc sub s) (sub.expr sub e)
+    | Pexp_newtype ((n, l), e) ->
+        newtype ~loc ~attrs (map_loc sub n, Option.map (map_loc sub) l) (sub.expr sub e)
     | Pexp_pack (me, pt) ->
         pack ~loc ~attrs
           (sub.module_expr sub me)
@@ -843,7 +846,8 @@ let default_mapper =
                  pcd_res; pcd_loc; pcd_attributes} ->
         Type.constructor
           (map_loc this pcd_name)
-          ~vars:(List.map (map_loc this) pcd_vars)
+          ~vars:(List.map
+            (fun (n,l) -> map_loc this n, Option.map (map_loc this) l) pcd_vars)
           ~args:(T.map_constructor_arguments this pcd_args)
           ?res:(map_opt (this.typ this) pcd_res)
           ~loc:(this.location this pcd_loc)

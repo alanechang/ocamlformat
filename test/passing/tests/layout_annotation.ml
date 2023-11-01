@@ -255,3 +255,16 @@ type t = int as (_ : immediate)
 type t = (('a : value), ('b : value)) t2
 
 type ('a, 'b) t = ('a : value) * ('b : value)
+
+(* comments *)
+val foo :
+  ((* comment 1 *) 'k (* comment 2 *) : (* comment 3 *) immediate64
+  (* comment 4 *)) (* comment 5 *)
+  'cmp.
+     (module S
+        with type Id_and_repr.t = 'k
+         and type Id_and_repr.comparator_witness = 'cmp )
+  -> 'k Jane_symbol.Map.t
+  -> ('k, Sockaddr.t, 'cmp) Map.t
+
+type a = b (* a *) as (* b *) 'c (* c *)

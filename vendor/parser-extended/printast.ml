@@ -212,15 +212,11 @@ let fmt_layout_opt ppf l = Format.fprintf ppf "%s"
   (Option.value ~default:"none" (Option.map (fun l -> layout_to_string l.txt) l))
 
 let fmt_ty_var ppf (name, layout) =
-  Format.fprintf ppf "%s:%a" (Option.value ~default:"_" name) fmt_layout_opt layout
-
-
-let fmt_ty_var_loc ppf x =
-  Format.fprintf ppf "%a %a" fmt_ty_var x.txt fmt_location x.loc
+  Format.fprintf ppf "%a:%a" fmt_string_loc name fmt_layout_opt layout
 
 let typevars ppf vs =
   List.iter (fun x ->
-      fprintf ppf " %a" fmt_ty_var_loc x) vs
+      fprintf ppf " %a" fmt_ty_var x) vs
 
 let variant_var i ppf (x : variant_var) =
   line i ppf "variant_var %a\n" fmt_location x.loc;
@@ -255,7 +251,7 @@ let rec core_type i ppf x =
       line i ppf "Ptyp_class %a\n" fmt_longident_loc li;
       list i core_type ppf l
   | Ptyp_alias (ct, s) ->
-      line i ppf "Ptyp_alias \"%a\"\n" fmt_ty_var_loc s;
+      line i ppf "Ptyp_alias \"%a\"\n" fmt_ty_var s;
       core_type i ppf ct;
   | Ptyp_poly (sl, ct) ->
       line i ppf "Ptyp_poly%a\n" typevars sl;
@@ -489,8 +485,7 @@ and expression i ppf x =
       line i ppf "Pexp_object\n";
       class_structure i ppf s
   | Pexp_newtype (s, e) ->
-      line i ppf "Pexp_newtype %a\n" fmt_string_loc
-        (Location.map (fun (n, _) -> Option.value ~default:"_" n) s);
+      line i ppf "Pexp_newtype %a\n" fmt_ty_var s;
       expression i ppf e
   | Pexp_pack (me, pt) ->
       line i ppf "Pexp_pack\n";
