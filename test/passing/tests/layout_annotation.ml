@@ -103,7 +103,6 @@ let f : ('a : any) -> 'a = fun x -> x
 
 let f : ('a : any). 'a -> 'a = fun x -> x
 
-
 let f : ('a : float64). 'a -> 'a = fun x -> x
 
 (********************************************)
@@ -166,7 +165,6 @@ let f : type (a : float64). a -> a = fun x -> x
 
 let f : type (a : any). a -> a = fun x -> x
 
-
 (**************************************************)
 (* Test 7: Defaulting universal variable to value *)
 
@@ -223,7 +221,6 @@ let f x =
 let f x y (type a : immediate) (z : a) = z
 
 let f x y (type a : immediate) (z : a) = z
-
 
 external f : ('a : immediate). 'a -> 'a = "%identity"
 
