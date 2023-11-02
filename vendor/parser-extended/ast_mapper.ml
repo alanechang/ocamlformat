@@ -90,7 +90,9 @@ let map_tuple3 f1 f2 f3 (x, y, z) = (f1 x, f2 y, f3 z)
 let map_opt f = function None -> None | Some x -> Some (f x)
 
 let map_loc sub {loc; txt} = {loc = sub.location sub loc; txt}
+
 let map_type_var sub (n, l) = map_loc sub n, map_opt (map_loc sub) l
+
 let variant_var sub x =
   {loc = sub.location sub x.loc; txt= map_loc sub x.txt}
 
@@ -206,8 +208,8 @@ module T = struct
     | Ptyp_variant (rl, b, ll) ->
         variant ~loc ~attrs (List.map (row_field sub) rl) b
           (map_opt (List.map (variant_var sub)) ll)
-    | Ptyp_poly (sl, t) -> poly ~loc ~attrs (List.map (map_type_var sub) sl)
-        (sub.typ sub t)
+    | Ptyp_poly (sl, t) -> poly ~loc ~attrs
+                             (List.map (map_type_var sub) sl) (sub.typ sub t)
     | Ptyp_package pt ->
         let lid, l = map_package_type sub pt in
         package ~loc ~attrs lid l
@@ -843,8 +845,7 @@ let default_mapper =
                  pcd_res; pcd_loc; pcd_attributes} ->
         Type.constructor
           (map_loc this pcd_name)
-          ~vars:(List.map
-            (fun (n,l) -> map_loc this n, Option.map (map_loc this) l) pcd_vars)
+          ~vars:(List.map (map_type_var this) pcd_vars)
           ~args:(T.map_constructor_arguments this pcd_args)
           ?res:(map_opt (this.typ this) pcd_res)
           ~loc:(this.location this pcd_loc)
