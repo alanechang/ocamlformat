@@ -507,27 +507,6 @@
  open Longident
  open Parsetree
 @@@@
-   | Public -> mk_pv ()
-   | Private priv -> mk_pv ~priv ()
- 
- let mkvarinj s l = mkloc s (make_loc l)
- let mktyp ~loc ?attrs d = Typ.mk ~loc:(make_loc loc) ?attrs d
--let mkpat ~loc ?attrs d = Pat.mk ~loc:(make_loc loc) ?attrs d
-+let mkpat ~loc d = Pat.mk ~loc:(make_loc loc) d
- let mkexp ~loc d = Exp.mk ~loc:(make_loc loc) d
- let mkmty ~loc ?attrs d = Mty.mk ~loc:(make_loc loc) ?attrs d
- let mksig ~loc d = Sig.mk ~loc:(make_loc loc) d
- let mkmod ~loc ?attrs d = Mod.mk ~loc:(make_loc loc) ?attrs d
- let mkstr ~loc d = Str.mk ~loc:(make_loc loc) d
-@@@@
-   AST node, then the location must be real; in all other cases,
-   it must be ghost.
- *)
- let ghexp ~loc d = Exp.mk ~loc:(ghost_loc loc) d
- let ghpat ~loc d = Pat.mk ~loc:(ghost_loc loc) d
--let ghtyp ~loc ?attrs d = Typ.mk ~loc:(ghost_loc loc) ?attrs d
-+let ghtyp ~loc d = Typ.mk ~loc:(ghost_loc loc) d
- let ghstr ~loc d = Str.mk ~loc:(ghost_loc loc) d
  let ghsig ~loc d = Sig.mk ~loc:(ghost_loc loc) d
  
  let mkinfix arg1 op arg2 =
@@ -774,8 +753,7 @@
  let mk_newtypes ~loc newtypes exp =
    let mkexp = mkexp ~loc in
 -  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (newtype, exp)))
-+  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype (
-+    Location.map (fun name -> (Some name, None)) newtype, exp)))
++  List.fold_right (fun newtype exp -> mkexp (Pexp_newtype ((newtype, None), exp)))
      newtypes exp
  
  let wrap_type_annotation ~loc newtypes core_type body =
@@ -783,27 +761,13 @@
    let mk_newtypes = mk_newtypes ~loc in
    let exp = mkexp(Pexp_constraint(body,core_type)) in
    let exp = mk_newtypes newtypes exp in
-+  let newtypes = List.map (fun name_loc ->
-+    mkloc (Some name_loc.txt, None) (make_loc loc)) newtypes in
-   (exp, ghtyp(Ptyp_poly(newtypes, core_type)))
+-  (exp, ghtyp(Ptyp_poly(newtypes, core_type)))
++  (exp, ghtyp(Ptyp_poly(List.map (fun n -> n, None) newtypes, core_type)))
  
  let wrap_exp_attrs ~loc body (ext, attrs) =
    let ghexp = ghexp ~loc in
    (* todo: keep exact location for the entire attribute *)
    let body = {body with pexp_attributes = attrs @ body.pexp_attributes} in
-   match ext with
-   | None -> body
-   | Some id -> ghexp(Pexp_extension (id, PStr [mkstrexp body []]))
- 
--let mkexp_attrs ~loc d ext_attrs =
--  wrap_exp_attrs ~loc (mkexp ~loc d) ext_attrs
-+let mkexp_attrs ~loc d attrs =
-+  wrap_exp_attrs ~loc (mkexp ~loc d) attrs
- 
- let wrap_typ_attrs ~loc typ (ext, attrs) =
-   (* todo: keep exact location for the entire attribute *)
-   let typ = {typ with ptyp_attributes = attrs @ typ.ptyp_attributes} in
-   match ext with
 @@@@
  let text_str pos = Str.text (rhs_text pos)
  let text_sig pos = Sig.text (rhs_text pos)
@@ -1241,8 +1205,7 @@
          lab,
          mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
    | x = label_var COLON
--          cty = mktyp (vars = typevar_list DOT ty = core_type
--                  { Ptyp_poly (vars, ty) })
+-          cty = mktyp (vars = typevar_list DOT ty = core_type { Ptyp_poly (vars, ty) })
 +          cty = mktyp (vars = typevar_list DOT ty = core_type { Ptyp_poly(vars, ty) })
        { let lab, pat = x in
          lab,
@@ -1261,13 +1224,9 @@
 +    pat = pattern
        COLON
        cty = mktyp(vars = typevar_list DOT ty = core_type
--              { Ptyp_poly (vars, ty) })
-+              { Ptyp_poly(vars, ty) })
+               { Ptyp_poly(vars, ty) })
          { Ppat_constraint(pat, cty) })
        { $1 }
- ;
- 
- %inline indexop_expr(dot, index, right):
 @@@@
      { array, d, Brace,   i, r }
    | array=simple_expr d=dot LBRACKET i=index RBRACKET r=right
@@ -1302,10 +1261,10 @@
 -    { let loc = $sloc in
 -      wrap_exp_attrs ~loc (mk_newtypes ~loc $5 $7) $2 }
 -  | FUN ext_attributes LPAREN TYPE
--    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+-    name=mkrhs(LIDENT) COLON layout=layout_annotation
 -    RPAREN fun_def
 -    { let loc = $sloc in
--      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [newtype] $7) $2 }
+-      wrap_exp_attrs ~loc (mk_newtypes ~loc:$sloc [name, Some layout] $9) $2 }
    | expr attribute
        { Exp.attr $1 $2 }
  /* BEGIN AVOID */
@@ -1550,9 +1509,9 @@
 +  | LPAREN TYPE lident_list RPAREN fun_binding
        { mk_newtypes ~loc:$sloc $3 $5 }
 -  | LPAREN TYPE
--    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+-    name=mkrhs(LIDENT) COLON layout=layout_annotation
 -    RPAREN fun_binding
--      { mk_newtypes ~loc:$sloc [newtype] $5 }
+-      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
  ;
  local_fun_binding:
      local_strict_binding
@@ -1568,9 +1527,9 @@
 +  | LPAREN TYPE lident_list RPAREN local_fun_binding
        { mk_newtypes ~loc:$sloc $3 $5 }
 -  | LPAREN TYPE
--    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+-    name=mkrhs(LIDENT) COLON layout=layout_annotation
 -    RPAREN fun_binding
--      { mk_newtypes ~loc:$sloc [newtype] $5 }
+-      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
  ;
  %inline match_cases:
    xs = preceded_or_separated_nonempty_llist(BAR, match_case)
@@ -1586,9 +1545,9 @@
 +  | LPAREN TYPE lident_list RPAREN fun_def
        { mk_newtypes ~loc:$sloc $3 $5 }
 -  | LPAREN TYPE
--    newtype=mkrhs(name=LIDENT COLON layout=layout_annotation { Some name, Some layout })
+-    name=mkrhs(LIDENT) COLON layout=layout_annotation
 -    RPAREN fun_def
--      { mk_newtypes ~loc:$sloc [newtype] $5 }
+-      { mk_newtypes ~loc:$sloc [name, Some layout] $7 }
  ;
  %inline expr_comma_list:
    es = separated_nontrivial_llist(COMMA, expr)
@@ -1611,11 +1570,11 @@
 -    { $1 }
 -
 -newtype: (* : string with_loc * layout_annotation option *)
--    mkrhs(LIDENT { Some $1, None }) { $1 }
+-    mkrhs(LIDENT) { $1, None }
 -  | LPAREN
--    mkrhs(name=LIDENT COLON layout=layout_annotation {Some name, Some layout})
+-    name=mkrhs(LIDENT) COLON layout=layout_annotation
 -    RPAREN
--      { $2 }
+-      { name, Some layout }
 -
  /* Patterns */
  
@@ -1785,7 +1744,7 @@
 -;
 -
 -%inline type_param_with_layout:
--  name=tyvar_name_or_underscore
+-  name=mkrhs(tyvar_name_or_underscore)
 -  attrs=attributes
 -  COLON
 -  layout=layout_annotation
@@ -1811,8 +1770,8 @@
 -%inline type_variable:
 +type_variable:
    mktyp(
-     QUOTE tyvar = ident
-       { Ptyp_var (Some tyvar, None) }
+     QUOTE tyvar = mkrhs(ident)
+       { Ptyp_var (tyvar, None) }
    | UNDERSCORE
        { Ptyp_any }
    ) { $1 }
@@ -1820,9 +1779,9 @@
  
 -%inline tyvar_name_or_underscore:
 -    QUOTE ident
--      { Some $2 }
+-      { $2 }
 -  | UNDERSCORE
--      { None }
+-      { "_" }
 -;
 -
  type_variance:
@@ -1846,47 +1805,28 @@
     means that the list is empty, or a nonempty BAR-separated list of
     declarations, with an optional leading BAR. *)
 @@@@
- ;
- %inline constructor_declaration(opening):
-   d = generic_constructor_declaration(opening)
-     {
-       let cid, vars, args, res, attrs, loc, info = d in
--      Type.constructor
--        cid ~vars ~args ?res ~attrs ~loc ~info
-+      Type.constructor cid ~vars ~args ?res ~attrs ~loc ~info
-     }
- ;
- str_exception_declaration:
-   sig_exception_declaration
-     { $1 }
-@@@@
    attrs1 = attributes
    id = mkrhs(constr_ident)
    vars_args_res = generalized_constructor_arguments
    attrs2 = attributes
    attrs = post_item_attributes
--    { let vars_layouts, args, res = vars_args_res in
+-  { let vars, args, res = vars_args_res in
+-    let loc = make_loc ($startpos, $endpos(attrs2)) in
+-    let docs = symbol_docs $sloc in
+-    Te.mk_exception ~attrs
+-      (Te.decl id ~vars ~args ?res ~attrs:(attrs1 @ attrs2) ~loc ~docs)
+-    , ext }
 +    { let vars, args, res = vars_args_res in
-       let loc = make_loc ($startpos, $endpos(attrs2)) in
-       let docs = symbol_docs $sloc in
--      let ext_ctor =
--        Te.constructor
--          ~loc ~attrs:(attrs1 @ attrs2) ~docs id
--          (Pext_decl (vars_layouts, args, res))
--      in
--      Te.mk_exception ~attrs ext_ctor, ext }
++      let loc = make_loc ($startpos, $endpos(attrs2)) in
++      let docs = symbol_docs $sloc in
 +      Te.mk_exception ~attrs
 +        (Te.decl id ~vars ~args ?res ~attrs:(attrs1 @ attrs2) ~loc ~docs)
 +      , ext }
  ;
  %inline let_exception_declaration:
      mkrhs(constr_ident) generalized_constructor_arguments attributes
--      { let vars_layouts, args, res = $2 in
--        Te.constructor
--            ~loc:(make_loc $sloc)
--            ~attrs:$3
--            $1
--            (Pext_decl (vars_layouts, args, res)) }
+-    { let vars, args, res = $2 in
+-      Te.decl $1 ~vars ~args ?res ~attrs:$3 ~loc:(make_loc $sloc) }
 +      { let vars, args, res = $2 in
 +        Te.decl $1 ~vars ~args ?res ~attrs:$3 ~loc:(make_loc $sloc) }
  ;
@@ -1897,39 +1837,17 @@
    | COLON constructor_arguments MINUSGREATER atomic_type %prec below_HASH
                                    { ([],$2,Some $4) }
 @@@@
-       { $1 }
- ;
- %inline extension_constructor_declaration(opening):
-   d = generic_constructor_declaration(opening)
-     {
--      let name, vars_layouts, args, res, attrs, loc, info = d in
--      Te.constructor
--        ~loc ~attrs ~info name
--        (Pext_decl (vars_layouts, args, res))
-+      let cid, vars, args, res, attrs, loc, info = d in
-+      Te.decl cid ~vars ~args ?res ~attrs ~loc ~info
-     }
- ;
- extension_constructor_rebind(opening):
-   opening
-   cid = mkrhs(constr_ident)
-@@@@
    | EQUAL PRIVATE  { Private (make_loc $loc($2)) }
  ;
  
  /* Polymorphic types */
  
 -%inline typevar: (* : string with_loc * layout_annotation option *)
--    QUOTE mkrhs(ident {(Some $1, None)})
--      { $2 }
--    | LPAREN QUOTE mkrhs(
--        ident COLON layout=layout_annotation
--        { (Some $1, Some layout) }
--    ) RPAREN
--      { $3 }
 +%inline typevar:
-+  QUOTE mkrhs(ident {Some $1, None})
-+    { $2 }
+   QUOTE mkrhs(ident)
+     { $2, None }
+-  | LPAREN QUOTE mkrhs(ident)  COLON layout=layout_annotation RPAREN
+-    { $3, Some layout }
  ;
  %inline typevar_list:
 -  (* : (string with_loc * layout_annotation option) list *)
@@ -1938,29 +1856,23 @@
  ;
  %inline poly(X):
    typevar_list DOT X
--    { Ptyp_poly ($1, $3) }
-+    { Ptyp_poly($1, $3) }
- ;
- possibly_poly(X):
-   X
-     { $1 }
- | mktyp(poly(X))
 @@@@
+  *)
+ alias_type:
      function_type
        { $1 }
    | mktyp(
-       ty = alias_type AS QUOTE tyvar = mkrhs(ident {Some $1, None})
-         { Ptyp_alias(ty, tyvar) }
+-      ty = alias_type AS QUOTE tyvar = mkrhs(ident)
+-        { Ptyp_alias(ty, (tyvar, None)) }
 -    | aliased_type = alias_type AS
 -      LPAREN
--      tyvar=mkrhs(
--        name = tyvar_name_or_underscore
--        COLON
--        layout = layout_annotation
--        {name, Some layout}
--      )
+-      name=mkrhs(tyvar_name_or_underscore)
+-      COLON
+-      layout = layout_annotation
 -      RPAREN
--        { Ptyp_alias (aliased_type, tyvar) }
+-        { Ptyp_alias (aliased_type, (name, Some layout)) }
++      ty = alias_type AS QUOTE name = mkrhs(ident)
++        { Ptyp_alias(ty, (name, None)) }
      )
      { $1 }
  ;
@@ -1983,20 +1895,7 @@
        label = arg_label
        local = optional_local
 @@@@
-       { $1 }
- ;
- %inline param_type:
-   | mktyp(
-     LPAREN vars = typevar_list DOT ty = core_type RPAREN
--      { Ptyp_poly (vars, ty) }
-+      { Ptyp_poly(vars, ty) }
-     )
-     { $1 }
-   | ty = tuple_type
-     { ty }
- ;
-@@@@
-         { Ptyp_var (Some $2, None) }
+         { Ptyp_var ($2, None) }
      | UNDERSCORE
          { Ptyp_any }
      | tys = actual_type_parameters
@@ -2018,10 +1917,10 @@
          { Ptyp_variant($3, Closed, Some $5) }
      | extension
          { Ptyp_extension $1 }
--    | LPAREN QUOTE name=ident COLON layout=layout_annotation RPAREN
--      { Ptyp_var (Some name, Some layout) }
--  | LPAREN UNDERSCORE COLON layout=layout_annotation RPAREN
--      { Ptyp_var (None, Some layout) }
+-    | LPAREN QUOTE name=mkrhs(ident) COLON layout=layout_annotation RPAREN
+-      { Ptyp_var (name, Some layout) }
+-    | LPAREN mkrhs(UNDERSCORE {"_"}) COLON layout=layout_annotation RPAREN
+-      { Ptyp_var ($2, Some layout) }
 -
    )
    { $1 } /* end mktyp group */
