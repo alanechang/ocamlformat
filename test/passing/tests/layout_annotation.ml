@@ -267,4 +267,14 @@ val foo :
   -> 'k Jane_symbol.Map.t
   -> ('k, Sockaddr.t, 'cmp) Map.t
 
-type a = b (* a *) as (* b *) 'c (* c *)
+type a =
+  b (* comment 0 *)
+  as
+  ((* comment 1 *)
+  'k
+  (* comment 2 *)
+  :
+  (* comment 3 *)
+  immediate64
+  (* comment 4 *))
+(* comment 5 *)
