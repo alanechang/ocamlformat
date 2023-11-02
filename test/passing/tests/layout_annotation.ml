@@ -256,6 +256,25 @@ type t = (('a : value), ('b : value)) t2
 
 type ('a, 'b) t = ('a : value) * ('b : value)
 
+class c : object
+  method m : ('a : immediate). 'a -> 'a
+
+  val f : ('a : immediate) -> 'a
+end =
+  object
+    method m : type (a : immediate). a -> a = fun x -> x
+
+    val f = fun (x : ('a : immediate)) -> x
+  end
+
+type _ g = MkG : ('a : immediate) ('b : void). 'a -> 'b g
+
+type ('a : void) t3 = ..
+
+type _ t3 += MkG : ('a : immediate) 'b. 'a -> 'b t3
+
+let f_gadt : ('a : value). 'a -> 'a g -> 'a = fun x MkG -> f_imm x
+
 (* comments *)
 val foo :
   ((* comment 1 *) 'k (* comment 2 *) : (* comment 3 *) immediate64
