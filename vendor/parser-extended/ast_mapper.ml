@@ -190,7 +190,7 @@ module T = struct
     let attrs = sub.attributes sub attrs in
     match desc with
     | Ptyp_any -> any ~loc ~attrs ()
-    | Ptyp_var s -> var ~loc ~attrs s
+    | Ptyp_var (n, l) -> var ~loc ~attrs (map_loc sub n, Option.map (map_loc sub) l)
     | Ptyp_arrow (params, t2) ->
         arrow ~loc ~attrs (List.map (map_arrow_param sub) params)
           (sub.typ sub t2)
