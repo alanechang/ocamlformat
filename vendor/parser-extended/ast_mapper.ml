@@ -90,7 +90,7 @@ let map_tuple3 f1 f2 f3 (x, y, z) = (f1 x, f2 y, f3 z)
 let map_opt f = function None -> None | Some x -> Some (f x)
 
 let map_loc sub {loc; txt} = {loc = sub.location sub loc; txt}
-
+let map_type_var sub (n, l) = map_loc sub n, map_opt (map_loc sub) l
 let variant_var sub x =
   {loc = sub.location sub x.loc; txt= map_loc sub x.txt}
 
@@ -190,7 +190,7 @@ module T = struct
     let attrs = sub.attributes sub attrs in
     match desc with
     | Ptyp_any -> any ~loc ~attrs ()
-    | Ptyp_var (n, l) -> var ~loc ~attrs (map_loc sub n, Option.map (map_loc sub) l)
+    | Ptyp_var s -> var ~loc ~attrs (map_type_var sub s)
     | Ptyp_arrow (params, t2) ->
         arrow ~loc ~attrs (List.map (map_arrow_param sub) params)
           (sub.typ sub t2)
@@ -202,13 +202,11 @@ module T = struct
           (Flag.map_obj_closed sub o)
     | Ptyp_class (lid, tl) ->
         class_ ~loc ~attrs (map_loc sub lid) (List.map (sub.typ sub) tl)
-    | Ptyp_alias (t, (n, l)) -> alias ~loc ~attrs (sub.typ sub t)
-        (map_loc sub n, Option.map (map_loc sub) l)
+    | Ptyp_alias (t, s) -> alias ~loc ~attrs (sub.typ sub t) (map_type_var sub s)
     | Ptyp_variant (rl, b, ll) ->
         variant ~loc ~attrs (List.map (row_field sub) rl) b
           (map_opt (List.map (variant_var sub)) ll)
-    | Ptyp_poly (sl, t) -> poly ~loc ~attrs
-        (List.map (fun (n, l) -> (map_loc sub n, Option.map (map_loc sub) l)) sl)
+    | Ptyp_poly (sl, t) -> poly ~loc ~attrs (List.map (map_type_var sub) sl)
         (sub.typ sub t)
     | Ptyp_package pt ->
         let lid, l = map_package_type sub pt in
@@ -278,8 +276,7 @@ module T = struct
 
   let map_extension_constructor_kind sub = function
       Pext_decl(vars, ctl, cto) ->
-        Pext_decl(List.map
-                    (fun (n, l) -> map_loc sub n, Option.map (map_loc sub) l) vars,
+        Pext_decl(List.map (map_type_var sub) vars,
                   map_constructor_arguments sub ctl,
                   map_opt (sub.typ sub) cto)
     | Pext_rebind li ->
@@ -562,8 +559,8 @@ module E = struct
     | Pexp_poly (e, t) ->
         poly ~loc ~attrs (sub.expr sub e) (map_opt (sub.typ sub) t)
     | Pexp_object cls -> object_ ~loc ~attrs (sub.class_structure sub cls)
-    | Pexp_newtype ((n, l), e) ->
-        newtype ~loc ~attrs (map_loc sub n, Option.map (map_loc sub) l) (sub.expr sub e)
+    | Pexp_newtype (s, e) ->
+        newtype ~loc ~attrs (map_type_var sub s) (sub.expr sub e)
     | Pexp_pack (me, pt) ->
         pack ~loc ~attrs
           (sub.module_expr sub me)
