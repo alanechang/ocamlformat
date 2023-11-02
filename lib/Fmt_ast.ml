@@ -564,15 +564,10 @@ let fmt_type_var ~have_tick c s =
              (String.length name.txt > 1 && Char.equal name.txt.[1] '\'')
              " " )
      $ str name.txt )
-  $ Option.value_map layout_opt ~default:(str "") ~f:(fmt_layout c)
+  $ Option.value_map layout_opt ~default:noop ~f:(fmt_layout c)
 
-let fmt_type_var_with_parenze_general f c s =
-  fmt_if (type_var_has_layout_annot s) "("
-  $ f c s
-  $ fmt_if (type_var_has_layout_annot s) ")"
-
-let fmt_type_var_with_parenze ~have_tick =
-  fmt_type_var_with_parenze_general (fmt_type_var ~have_tick)
+let fmt_type_var_with_parenze ~have_tick c s =
+  wrap_if (type_var_has_layout_annot s) "(" ")" (fmt_type_var ~have_tick c s)
 
 let split_global_flags_from_attrs conf atrs =
   match
@@ -3498,7 +3493,7 @@ and fmt_type_declaration c ?ext ?(pre = "") ctx ?name ?(eq = "=") decl =
           0
           ( fmt_tydcl_params c ctx ptype_params
           $ Option.value_map name ~default:(str txt) ~f:(fmt_longident_loc c)
-          $ fmt_opt (Option.map ~f:(fun l -> fmt_layout c l) ptype_layout) )
+          $ fmt_opt (Option.map ~f:(fmt_layout c) ptype_layout) )
       $ k )
   in
   let fmt_manifest_kind =

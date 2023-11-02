@@ -2262,8 +2262,7 @@ label_let_pattern:
         lab,
         mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
   | x = label_var COLON
-          cty = mktyp (vars = typevar_list DOT ty = core_type
-                  { Ptyp_poly (vars, ty) })
+          cty = mktyp (vars = typevar_list DOT ty = core_type { Ptyp_poly (vars, ty) })
       { let lab, pat = x in
         lab,
         mkpat ~loc:$sloc (Ppat_constraint (pat, cty)) }
@@ -2286,7 +2285,7 @@ let_pattern:
       pat = pattern
       COLON
       cty = mktyp(vars = typevar_list DOT ty = core_type
-              { Ptyp_poly (vars, ty) })
+              { Ptyp_poly(vars, ty) })
         { Ppat_constraint(pat, cty) })
       { $1 }
 ;
@@ -3345,8 +3344,7 @@ generic_constructor_declaration(opening):
   d = generic_constructor_declaration(opening)
     {
       let cid, vars, args, res, attrs, loc, info = d in
-      Type.constructor
-        cid ~vars ~args ?res ~attrs ~loc ~info
+      Type.constructor cid ~vars ~args ?res ~attrs ~loc ~info
     }
 ;
 str_exception_declaration:
@@ -3374,24 +3372,17 @@ sig_exception_declaration:
   vars_args_res = generalized_constructor_arguments
   attrs2 = attributes
   attrs = post_item_attributes
-    { let vars_layouts, args, res = vars_args_res in
-      let loc = make_loc ($startpos, $endpos(attrs2)) in
-      let docs = symbol_docs $sloc in
-      let ext_ctor =
-        Te.constructor
-          ~loc ~attrs:(attrs1 @ attrs2) ~docs id
-          (Pext_decl (vars_layouts, args, res))
-      in
-      Te.mk_exception ~attrs ext_ctor, ext }
+  { let vars, args, res = vars_args_res in
+    let loc = make_loc ($startpos, $endpos(attrs2)) in
+    let docs = symbol_docs $sloc in
+    Te.mk_exception ~attrs
+      (Te.decl id ~vars ~args ?res ~attrs:(attrs1 @ attrs2) ~loc ~docs)
+    , ext }
 ;
 %inline let_exception_declaration:
     mkrhs(constr_ident) generalized_constructor_arguments attributes
-      { let vars_layouts, args, res = $2 in
-        Te.constructor
-            ~loc:(make_loc $sloc)
-            ~attrs:$3
-            $1
-            (Pext_decl (vars_layouts, args, res)) }
+    { let vars, args, res = $2 in
+      Te.decl $1 ~vars ~args ?res ~attrs:$3 ~loc:(make_loc $sloc) }
 ;
 
 generalized_constructor_arguments:
@@ -3483,10 +3474,8 @@ label_declaration_semi:
 %inline extension_constructor_declaration(opening):
   d = generic_constructor_declaration(opening)
     {
-      let name, vars_layouts, args, res, attrs, loc, info = d in
-      Te.constructor
-        ~loc ~attrs ~info name
-        (Pext_decl (vars_layouts, args, res))
+      let cid, vars, args, res, attrs, loc, info = d in
+      Te.decl cid ~vars ~args ?res ~attrs ~loc ~info
     }
 ;
 extension_constructor_rebind(opening):
@@ -3541,10 +3530,10 @@ with_type_binder:
 /* Polymorphic types */
 
 %inline typevar: (* : string with_loc * layout_annotation option *)
-    QUOTE mkrhs(ident)
-      { $2, None }
-    | LPAREN QUOTE mkrhs(ident)  COLON layout=layout_annotation RPAREN
-      { $3, Some layout }
+  QUOTE mkrhs(ident)
+    { $2, None }
+  | LPAREN QUOTE mkrhs(ident)  COLON layout=layout_annotation RPAREN
+    { $3, Some layout }
 ;
 %inline typevar_list:
   (* : (string with_loc * layout_annotation option) list *)
@@ -3553,7 +3542,7 @@ with_type_binder:
 ;
 %inline poly(X):
   typevar_list DOT X
-    { Ptyp_poly ($1, $3) }
+    { Ptyp_poly($1, $3) }
 ;
 possibly_poly(X):
   X
@@ -3672,7 +3661,7 @@ strict_function_type:
 %inline param_type:
   | mktyp(
     LPAREN vars = typevar_list DOT ty = core_type RPAREN
-      { Ptyp_poly (vars, ty) }
+      { Ptyp_poly(vars, ty) }
     )
     { $1 }
   | ty = tuple_type
@@ -3760,7 +3749,7 @@ atomic_type:
         { Ptyp_extension $1 }
     | LPAREN QUOTE name=mkrhs(ident) COLON layout=layout_annotation RPAREN
       { Ptyp_var (name, Some layout) }
-  | LPAREN mkrhs(UNDERSCORE {"_"}) COLON layout=layout_annotation RPAREN
+    | LPAREN mkrhs(UNDERSCORE {"_"}) COLON layout=layout_annotation RPAREN
       { Ptyp_var ($2, Some layout) }
 
   )

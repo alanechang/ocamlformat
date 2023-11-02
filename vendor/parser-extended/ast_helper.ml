@@ -484,7 +484,8 @@ module Type = struct
      ptype_kind = kind;
      ptype_private = priv;
      ptype_manifest = manifest;
-     ptype_attributes = add_text_attrs text (add_docs_attrs docs attrs);
+     ptype_attributes =
+       add_text_attrs text (add_docs_attrs docs attrs);
      ptype_loc = loc;
      ptype_layout = layout;
     }
