@@ -781,10 +781,12 @@ and type_constr_and_body c xbody =
 (* Jane street: This is used to print both arrow param types and arrow return
    types. The ~return parameter distinguishes. *)
 and fmt_arrow_param ~return c ctx
-    ({pap_label= lI; pap_loc= locI; pap_type= tI}, localI) =
-  let lI, tI =
-    match (lI, tI.ptyp_desc) with
-    | Labelled l, Ptyp_extension ({txt= "call_pos"; loc}, _)
+    (({pap_label= lI; pap_loc= locI; pap_type= tI} as arrow_arg), localI) =
+  let lI, xtI =
+    match (lI, tI.ptyp_desc, ctx) with
+    | ( Labelled l
+      , Ptyp_extension ({txt= "call_pos"; loc}, _)
+      , Typ ({ptyp_desc= Ptyp_arrow (args, ret_typ); _} as ctx_typ) )
       when Erase_jane_syntax.should_erase () ->
         let label = Optional l in
         let type_ =
@@ -792,8 +794,21 @@ and fmt_arrow_param ~return c ctx
             {loc; txt= Ldot (Ldot (Lident "Stdlib", "Lexing"), "position")}
             []
         in
-        (label, type_)
-    | _ -> (lI, tI)
+        let ctx_ =
+          Typ
+            { ctx_typ with
+              ptyp_desc=
+                Ptyp_arrow
+                  ( List.map
+                      ~f:(fun arg ->
+                        if Base.phys_equal arg arrow_arg then
+                          {arrow_arg with pap_type= type_}
+                        else arg )
+                      args
+                  , ret_typ ) }
+        in
+        (label, sub_typ ~ctx:ctx_ type_)
+    | _ -> (lI, sub_typ ~ctx tI)
   in
   let arg_label lbl =
     match lbl with
@@ -802,7 +817,6 @@ and fmt_arrow_param ~return c ctx
     | Optional l ->
         Some (str "?" $ str l.txt $ fmt ":@," $ fmt_if localI "local_ ")
   in
-  let xtI = sub_typ ~ctx tI in
   (* Jane Street: as a special case, labeled tuple types in function returns
      need parens if the return is [local_] AND the first element has a label.
      We _should_ put this logic in [parenze_typ] or a similar place, but we
